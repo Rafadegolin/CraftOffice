@@ -26,6 +26,7 @@ import net.minecraft.world.entity.player.Player;
 import dev.rafadegolin.craftoffice.CraftOffice;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.PeerSession;
+import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
 import dev.rafadegolin.craftoffice.client.render.VideoHud;
 import dev.rafadegolin.craftoffice.client.ui.Keys;
 import dev.rafadegolin.craftoffice.client.ui.OfficeActions;
@@ -48,6 +49,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			OfficeSession.tick(client);
+			DistanceVolume.tick(client);
 
 			// Com conexão aberta, grava os números no log a cada 5 segundos.
 			MediaEngine engine = MediaEngine.getIfLoaded();
@@ -138,6 +140,13 @@ public class CraftOfficeClient implements ClientModInitializer {
 									engine.run(() -> feedback(List.of(engine.setMicrophone(index))));
 									return 1;
 								})))
+						.then(ClientCommands.literal("output")
+								.then(ClientCommands.argument("number", IntegerArgumentType.integer(1)).executes(ctx -> {
+									int index = IntegerArgumentType.getInteger(ctx, "number");
+									MediaEngine engine = MediaEngine.get();
+									engine.run(() -> feedback(List.of(engine.setSpeaker(index))));
+									return 1;
+								})))
 						.then(ClientCommands.literal("stats").executes(this::stats))));
 	}
 
@@ -197,11 +206,14 @@ public class CraftOfficeClient implements ClientModInitializer {
 		lines.add("webrtc-java: " + (engine.ready() ? "carregada em " + engine.loadMillis() + " ms" : "falhou: " + engine.loadError()));
 		lines.add(String.format("Câmera: %s, %.1f fps, origem %s, jogo %d fps", engine.videoOn() ? "ligada" : "desligada",
 				engine.selfSlot().fps(), engine.selfSlot().sourceSize(), Minecraft.getInstance().getFps()));
-		lines.add("Microfone: " + engine.micName());
+		lines.add(String.format("Microfone: %s, %s, pico %d. Saída: %s", engine.micName(),
+				engine.micOn() ? "ligado" : "desligado", engine.mic() != null ? engine.mic().peak() : 0, engine.speakerName()));
 		for (PeerSession s : engine.sessions().values()) {
-			lines.add(String.format("%s: %s, par %s, vídeo %.1f fps %s, áudio %s, %.0f callbacks/s, pico %d",
+			PeerAudio audio = engine.mixer() != null ? engine.mixer().peerIfPresent(s.peer()) : null;
+			lines.add(String.format("%s: %s, par %s, vídeo %.1f fps %s, áudio %s, %.0f callbacks/s, pico %d, volume %.0f%%, buffer %d ms",
 					s.peer().toString().substring(0, 8), s.state(), s.selectedPair(), s.remoteSlot().fps(),
-					s.remoteSlot().sourceSize(), s.remoteAudioFormat(), s.remoteAudioCallbacksPerSecond(), s.remoteAudioPeak()));
+					s.remoteSlot().sourceSize(), s.remoteAudioFormat(), s.remoteAudioCallbacksPerSecond(), s.remoteAudioPeak(),
+					audio != null ? audio.gain() * 100 : 0f, audio != null ? audio.bufferedMillis() : 0));
 		}
 		return lines;
 	}

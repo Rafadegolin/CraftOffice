@@ -35,6 +35,7 @@ import dev.onvoid.webrtc.media.audio.AudioTrackSink;
 import dev.onvoid.webrtc.media.video.VideoTrack;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 
@@ -60,7 +61,7 @@ public final class PeerSession implements PeerConnectionObserver {
 	private volatile RTCPeerConnectionState state = RTCPeerConnectionState.NEW;
 	private volatile String selectedPair = "-";
 
-	/** Prova de que dá para ler o PCM de cada pessoa, base de um mixer com volume próprio. */
+	/** Números do áudio recebido, para as estatísticas. */
 	private final RateCounter remoteAudioCallbacks = new RateCounter();
 	private volatile String remoteAudioFormat = "-";
 	private volatile int remoteAudioPeak;
@@ -285,22 +286,16 @@ public final class PeerSession implements PeerConnectionObserver {
 			video.addSink(remoteSlot);
 		}
 		else if (track instanceof AudioTrack audio) {
-			audio.addSink((AudioTrackSink) this::onRemoteAudio);
+			// O áudio de cada vizinho vai para o mixer, que aplica o volume da distância.
+			PeerAudio target = engine.mixer().peer(peer);
+			audio.addSink((AudioTrackSink) (data, bitsPerSample, sampleRate, channels, frames) -> {
+				remoteAudioCallbacks.tick();
+				remoteAudioFormat = sampleRate + " Hz, " + channels + " canal(is), " + bitsPerSample + " bits";
+				target.onData(data, bitsPerSample, sampleRate, channels, frames);
+				remoteAudioPeak = target.peak();
+			});
 		}
 		CraftOffice.LOGGER.info("Faixa remota de {}: {}", peer, track.getKind());
-	}
-
-	private void onRemoteAudio(byte[] data, int bitsPerSample, int sampleRate, int channels, int frames) {
-		remoteAudioCallbacks.tick();
-		remoteAudioFormat = sampleRate + " Hz, " + channels + " canal(is), " + bitsPerSample + " bits";
-		if (bitsPerSample == 16) {
-			int peak = 0;
-			for (int i = 0; i + 1 < data.length; i += 2) {
-				int sample = (short) ((data[i] & 0xFF) | (data[i + 1] << 8));
-				peak = Math.max(peak, Math.abs(sample));
-			}
-			remoteAudioPeak = peak;
-		}
 	}
 
 	public UUID peer() {

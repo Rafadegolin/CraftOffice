@@ -11,10 +11,12 @@ import java.util.concurrent.Executors;
 import dev.onvoid.webrtc.PeerConnectionFactory;
 import dev.onvoid.webrtc.media.MediaDevices;
 import dev.onvoid.webrtc.media.audio.AudioDevice;
-import dev.onvoid.webrtc.media.audio.AudioDeviceModule;
-import dev.onvoid.webrtc.media.audio.AudioOptions;
+import dev.onvoid.webrtc.media.audio.AudioPlayer;
+import dev.onvoid.webrtc.media.audio.AudioProcessing;
+import dev.onvoid.webrtc.media.audio.AudioProcessingConfig;
 import dev.onvoid.webrtc.media.audio.AudioTrack;
-import dev.onvoid.webrtc.media.audio.AudioTrackSource;
+import dev.onvoid.webrtc.media.audio.CustomAudioSource;
+import dev.onvoid.webrtc.media.audio.HeadlessAudioDeviceModule;
 import dev.onvoid.webrtc.media.video.VideoCaptureCapability;
 import dev.onvoid.webrtc.media.video.VideoDevice;
 import dev.onvoid.webrtc.media.video.VideoDeviceSource;
@@ -22,6 +24,8 @@ import dev.onvoid.webrtc.media.video.VideoTrack;
 import dev.onvoid.webrtc.media.video.VideoTrackSource;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.client.media.audio.AudioMixer;
+import dev.rafadegolin.craftoffice.client.media.audio.MicCapture;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
 
 /**
@@ -44,10 +48,22 @@ public final class MediaEngine {
 	private volatile String loadError;
 	private volatile long loadMillis = -1;
 
-	private AudioDeviceModule audioModule;
-	private volatile String micName = "-";
-	private AudioTrackSource audioSource;
+	/*
+	 * Áudio próprio: a WebRTC usa um módulo sem dispositivo, o microfone entra
+	 * por uma fonte própria depois do processamento de voz, e o som de cada
+	 * vizinho passa pelo mixer, que aplica o volume da distância.
+	 */
+	private HeadlessAudioDeviceModule audioModule;
+	private AudioProcessing processing;
+	private CustomAudioSource audioSource;
 	private AudioTrack audioTrack;
+	private AudioMixer mixer;
+	private MicCapture mic;
+	private AudioPlayer player;
+	private AudioDevice micDevice;
+	private AudioDevice speakerDevice;
+	private volatile String micName = "-";
+	private volatile String speakerName = "-";
 
 	private VideoTrackSource videoSource;
 	private VideoTrack videoTrack;
@@ -87,30 +103,34 @@ public final class MediaEngine {
 	private void load() {
 		long start = System.nanoTime();
 		try {
-			// Sem escolher, o módulo abre o primeiro microfone da lista, que pode
-			// ser uma entrada vazia e mandar silêncio. Usa os padrões do Windows.
-			audioModule = new AudioDeviceModule();
-			AudioDevice mic = MediaDevices.getDefaultAudioCaptureDevice();
-			if (mic != null) {
-				audioModule.setRecordingDevice(mic);
-				micName = mic.getName();
-			}
-			AudioDevice speaker = MediaDevices.getDefaultAudioRenderDevice();
-			if (speaker != null) {
-				audioModule.setPlayoutDevice(speaker);
-			}
-			CraftOffice.LOGGER.info("Microfone: {}. Saída: {}", micName, speaker != null ? speaker.getName() : "-");
+			audioModule = new HeadlessAudioDeviceModule();
 			factory = new PeerConnectionFactory(audioModule);
 
-			AudioOptions options = new AudioOptions();
-			options.echoCancellation = true;
-			options.noiseSuppression = true;
-			options.autoGainControl = true;
-			options.highpassFilter = true;
-			audioSource = factory.createAudioSource(options);
+			processing = new AudioProcessing();
+			AudioProcessingConfig config = new AudioProcessingConfig();
+			config.echoCanceller.enabled = true;
+			config.noiseSuppression.enabled = true;
+			config.noiseSuppression.level = AudioProcessingConfig.NoiseSuppression.Level.MODERATE;
+			config.highPassFilter.enabled = true;
+			config.gainControllerDigital.enabled = true;
+			config.gainControllerDigital.adaptiveDigital.enabled = true;
+			processing.applyConfig(config);
+
+			audioSource = new CustomAudioSource();
 			audioTrack = factory.createAudioTrack("mic", audioSource);
 			// Microfone começa desligado, como a câmera.
 			audioTrack.setEnabled(false);
+			mic = new MicCapture(processing, audioSource);
+			mixer = new AudioMixer(processing);
+
+			// Sem escolher, a captura abre o primeiro microfone da lista, que pode
+			// ser uma entrada vazia e mandar silêncio. Usa os padrões do Windows.
+			micDevice = MediaDevices.getDefaultAudioCaptureDevice();
+			micName = micDevice != null ? micDevice.getName() : "-";
+			speakerDevice = MediaDevices.getDefaultAudioRenderDevice();
+			speakerName = speakerDevice != null ? speakerDevice.getName() : "-";
+			startPlayer();
+			CraftOffice.LOGGER.info("Microfone: {}. Saída: {}", micName, speakerName);
 
 			loadMillis = (System.nanoTime() - start) / 1_000_000;
 			CraftOffice.LOGGER.info("webrtc-java carregada em {} ms", loadMillis);
@@ -158,20 +178,55 @@ public final class MediaEngine {
 		return micName;
 	}
 
+	public String speakerName() {
+		return speakerName;
+	}
+
+	public AudioMixer mixer() {
+		return mixer;
+	}
+
+	/** Pico do próprio microfone depois do processamento, e se está falando. */
+	public MicCapture mic() {
+		return mic;
+	}
+
+	private void startPlayer() {
+		if (player != null) {
+			player.stop();
+		}
+		player = new AudioPlayer();
+		player.setAudioDevice(speakerDevice);
+		player.setAudioSource(mixer);
+		player.start();
+	}
+
 	/** Troca o microfone pelo número da lista de {@code /office devices}. Roda na thread de mídia. */
 	public String setMicrophone(int index) {
 		List<AudioDevice> mics = MediaDevices.getAudioCaptureDevices();
 		if (!ready() || index < 1 || index > mics.size()) {
 			return "Microfone inválido. Veja os números em /office devices";
 		}
-		AudioDevice mic = mics.get(index - 1);
-		audioModule.stopRecording();
-		audioModule.setRecordingDevice(mic);
-		audioModule.initRecording();
-		audioModule.startRecording();
-		micName = mic.getName();
+		micDevice = mics.get(index - 1);
+		micName = micDevice.getName();
+		if (micOn) {
+			mic.start(micDevice);
+		}
 		CraftOffice.LOGGER.info("Microfone trocado para {}", micName);
 		return "Microfone: " + micName;
+	}
+
+	/** Troca a saída de som pelo número da lista de {@code /office devices}. Roda na thread de mídia. */
+	public String setSpeaker(int index) {
+		List<AudioDevice> speakers = MediaDevices.getAudioRenderDevices();
+		if (!ready() || index < 1 || index > speakers.size()) {
+			return "Saída inválida. Veja os números em /office devices";
+		}
+		speakerDevice = speakers.get(index - 1);
+		speakerName = speakerDevice.getName();
+		startPlayer();
+		CraftOffice.LOGGER.info("Saída trocada para {}", speakerName);
+		return "Saída: " + speakerName;
 	}
 
 	/** Lista de dispositivos, para o comando {@code /office devices}. Roda na thread de mídia. */
@@ -185,8 +240,9 @@ public final class MediaEngine {
 		for (AudioDevice device : MediaDevices.getAudioCaptureDevices()) {
 			lines.add("Microfone " + n++ + ": " + device.getName() + (device.getName().equals(micName) ? " (em uso)" : ""));
 		}
+		n = 1;
 		for (AudioDevice device : MediaDevices.getAudioRenderDevices()) {
-			lines.add("Saída: " + device.getName());
+			lines.add("Saída " + n++ + ": " + device.getName() + (device.getName().equals(speakerName) ? " (em uso)" : ""));
 		}
 		return lines;
 	}
@@ -274,6 +330,12 @@ public final class MediaEngine {
 		if (!ready()) {
 			return;
 		}
+		if (on && !mic.capturing()) {
+			mic.start(micDevice);
+		}
+		else if (!on) {
+			mic.stop();
+		}
 		audioTrack.setEnabled(on);
 		micOn = on;
 	}
@@ -298,6 +360,7 @@ public final class MediaEngine {
 	public void shutdown() {
 		closeAll();
 		setVideo(false);
+		setMic(false);
 		if (videoTrack != null) {
 			videoTrack.removeSink(selfSlot);
 			release("faixa de vídeo", videoTrack::dispose);
@@ -320,7 +383,15 @@ public final class MediaEngine {
 		if (audioModule != null) {
 			release("módulo de áudio", audioModule::dispose);
 		}
+		if (player != null) {
+			release("saída de som", player::stop);
+		}
+		if (processing != null) {
+			release("processamento de voz", processing::dispose);
+		}
 		audioModule = null;
+		player = null;
+		processing = null;
 		videoTrack = null;
 		videoSource = null;
 		pattern = null;
@@ -393,6 +464,9 @@ public final class MediaEngine {
 		PeerSession session = sessions.remove(peer);
 		if (session != null) {
 			session.close();
+		}
+		if (mixer != null) {
+			mixer.remove(peer);
 		}
 	}
 
