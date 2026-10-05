@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -23,6 +24,9 @@ import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 import dev.rafadegolin.craftoffice.net.StatePayload;
 import dev.rafadegolin.craftoffice.proximity.ProximityEngine;
+import dev.rafadegolin.craftoffice.zone.Zone;
+import dev.rafadegolin.craftoffice.zone.ZoneCommands;
+import dev.rafadegolin.craftoffice.zone.ZoneManager;
 
 /**
  * Lado servidor: sabe quem tem o mod, entrega a configuração, roda o motor de
@@ -40,6 +44,7 @@ public final class OfficeServer {
 	private static ServerConfig config = new ServerConfig();
 	private static ProximityEngine engine = newEngine(config);
 	private static int ticks;
+	private static ZoneManager zones;
 
 	private static final Map<UUID, Integer> protocols = new ConcurrentHashMap<>();
 	private static final Map<UUID, StatePayload> states = new ConcurrentHashMap<>();
@@ -58,12 +63,17 @@ public final class OfficeServer {
 			config = ServerConfig.load();
 			engine = newEngine(config);
 		});
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> zones = new ZoneManager(server));
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			protocols.clear();
 			states.clear();
 			signalRates.clear();
 			engine.clear();
+			zones = null;
 		});
+
+		CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) ->
+				ZoneCommands.register(dispatcher, () -> zones));
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			if (++ticks >= TICK_INTERVAL) {
@@ -77,6 +87,9 @@ public final class OfficeServer {
 			protocols.remove(id);
 			states.remove(id);
 			signalRates.remove(id);
+			if (zones != null) {
+				zones.forget(id);
+			}
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(HelloPayload.TYPE, (payload, context) -> {
@@ -88,6 +101,9 @@ public final class OfficeServer {
 			}
 			protocols.put(player.getUUID(), payload.protocol());
 			ServerPlayNetworking.send(player, config.toPayload());
+			if (zones != null) {
+				ServerPlayNetworking.send(player, zones.payload());
+			}
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(StatePayload.TYPE, (payload, context) -> {
@@ -121,11 +137,25 @@ public final class OfficeServer {
 	}
 
 	private static void updateProximity(MinecraftServer server) {
+		if (zones == null) {
+			return;
+		}
+		List<ServerPlayer> players = server.getPlayerList().getPlayers();
+		zones.tick(players);
+		if (zones.consumeDirty()) {
+			for (ServerPlayer player : players) {
+				if (enabled(player)) {
+					ServerPlayNetworking.send(player, zones.payload());
+				}
+			}
+		}
+
 		List<ProximityEngine.Position> positions = new ArrayList<>();
-		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+		for (ServerPlayer player : players) {
 			if (participates(player)) {
-				positions.add(new ProximityEngine.Position(player.getUUID(), player.level().dimension().toString(),
-						player.getX(), player.getY(), player.getZ()));
+				Zone zone = zones.zoneOf(player);
+				positions.add(new ProximityEngine.Position(player.getUUID(), ZoneManager.dimensionOf(player),
+						player.getX(), player.getY(), player.getZ(), zone != null ? zone.name().toLowerCase() : null, false, 1));
 			}
 		}
 

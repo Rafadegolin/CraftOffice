@@ -31,6 +31,9 @@
 	"craftoffice.hud.you": "Você",
 	"craftoffice.hud.off": "CraftOffice desligado. %s abre o painel",
 
+	"craftoffice.zone.entered": "Entrou na sala %s",
+	"craftoffice.zone.left": "Saiu da sala %s",
+
 	"craftoffice.status.mic_on": "Microfone ligado",
 	"craftoffice.status.mic_off": "Microfone desligado",
 	"craftoffice.status.camera_on": "Câmera ligada",

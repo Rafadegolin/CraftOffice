@@ -32,6 +32,7 @@ import dev.rafadegolin.craftoffice.client.render.VideoBillboards;
 import dev.rafadegolin.craftoffice.client.render.VideoHud;
 import dev.rafadegolin.craftoffice.client.render.VideoTexture;
 import dev.rafadegolin.craftoffice.client.render.VideoTextures;
+import dev.rafadegolin.craftoffice.client.render.ZoneOutlines;
 import dev.rafadegolin.craftoffice.client.ui.Keys;
 import dev.rafadegolin.craftoffice.client.ui.OfficeActions;
 import dev.rafadegolin.craftoffice.client.ui.StatusHud;
@@ -40,6 +41,7 @@ import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
 import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
+import dev.rafadegolin.craftoffice.net.ZonesPayload;
 
 public class CraftOfficeClient implements ClientModInitializer {
 	private final VideoHud hud = new VideoHud();
@@ -55,6 +57,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			OfficeSession.tick(client);
 			DistanceVolume.tick(client);
+			ClientZones.tick(client);
 
 			// Com conexão aberta, grava os números no log a cada 5 segundos.
 			MediaEngine engine = MediaEngine.getIfLoaded();
@@ -67,6 +70,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 		HudElementRegistry.addLast(CraftOffice.id("status"), StatusHud::extract);
 		HudElementRegistry.addLast(CraftOffice.id("video"), hud::extract);
 		LevelRenderEvents.COLLECT_SUBMITS.register(VideoBillboards::collect);
+		LevelRenderEvents.COLLECT_SUBMITS.register(ZoneOutlines::collect);
 
 		// Servidor sem o mod não registra o hello: o mod fica quieto e nada quebra.
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
@@ -86,6 +90,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 
 		ClientPlayNetworking.registerGlobalReceiver(PeerPayload.TYPE, (payload, context) -> OfficeSession.onPeer(payload));
 		ClientPlayNetworking.registerGlobalReceiver(PeerStatePayload.TYPE, (payload, context) -> OfficeSession.onPeerState(payload));
+		ClientPlayNetworking.registerGlobalReceiver(ZonesPayload.TYPE, (payload, context) -> ClientZones.onZones(payload));
 
 		ClientPlayNetworking.registerGlobalReceiver(SignalPayload.TYPE, (payload, context) -> {
 			// Só negocia com quem o servidor disse que é vizinho, e com consentimento.
@@ -119,6 +124,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 			}
 			client.execute(() -> {
 				OfficeSession.reset();
+				ClientZones.reset();
 				hud.clear();
 			});
 		});
