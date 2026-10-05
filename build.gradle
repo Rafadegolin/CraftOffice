@@ -20,6 +20,21 @@ loom {
 			sourceSet sourceSets.client
 		}
 	}
+
+	runs {
+		client {
+			programArgs "--username", "Player1"
+		}
+		// Segundo cliente para testar a conexão na mesma máquina. Usa padrão
+		// de teste no lugar da webcam, que só abre em um processo por vez.
+		client2 {
+			client()
+			name = "Minecraft Client 2"
+			runDir = "run-client2"
+			programArgs "--username", "Player2"
+			vmArgs "-Dcraftoffice.testPattern=true"
+		}
+	}
 }
 
 dependencies {
@@ -29,6 +44,16 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Mídia só no cliente. O POM da webrtc-java declara o nativo com um
+	// classifier não resolvido, por isso as transitivas ficam desligadas e o
+	// nativo de cada sistema é declarado à mão.
+	clientImplementation("dev.onvoid.webrtc:webrtc-java:${project.webrtc_version}") { transitive = false }
+	include("dev.onvoid.webrtc:webrtc-java:${project.webrtc_version}") { transitive = false }
+	for (platform in ["windows-x86_64"]) {
+		clientRuntimeOnly("dev.onvoid.webrtc:webrtc-java:${project.webrtc_version}:${platform}") { transitive = false }
+		include("dev.onvoid.webrtc:webrtc-java:${project.webrtc_version}:${platform}") { transitive = false }
+	}
 }
 
 processResources {
