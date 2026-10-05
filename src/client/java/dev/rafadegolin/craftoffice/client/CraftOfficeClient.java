@@ -34,6 +34,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 
 	private final VideoHud hud = new VideoHud();
 	private KeyMapping toggleCamera;
+	private int statsTicks;
 
 	@Override
 	public void onInitializeClient() {
@@ -47,6 +48,13 @@ public class CraftOfficeClient implements ClientModInitializer {
 			while (toggleCamera.consumeClick()) {
 				MediaEngine engine = MediaEngine.get();
 				engine.run(() -> engine.setVideo(!engine.videoOn()));
+			}
+
+			// Fase 0: com conexão aberta, grava os números no log a cada 5 segundos.
+			MediaEngine engine = MediaEngine.getIfLoaded();
+			if (++statsTicks >= 100 && engine != null && !engine.sessions().isEmpty()) {
+				statsTicks = 0;
+				engine.run(() -> statsLines(engine).forEach(line -> CraftOffice.LOGGER.info("[auto] {}", line)));
 			}
 		});
 
@@ -158,19 +166,24 @@ public class CraftOfficeClient implements ClientModInitializer {
 	private int stats(CommandContext<FabricClientCommandSource> ctx) {
 		MediaEngine engine = MediaEngine.get();
 		engine.run(() -> {
-			List<String> lines = new java.util.ArrayList<>();
-			lines.add("webrtc-java: " + (engine.ready() ? "carregada em " + engine.loadMillis() + " ms" : "falhou: " + engine.loadError()));
-			lines.add(String.format("Câmera: %s, %.1f fps, origem %s", engine.videoOn() ? "ligada" : "desligada",
-					engine.selfSlot().fps(), engine.selfSlot().sourceSize()));
-			for (PeerSession s : engine.sessions().values()) {
-				lines.add(String.format("%s: %s, par %s, vídeo %.1f fps %s, áudio %s, %.0f callbacks/s, pico %d",
-						s.peer().toString().substring(0, 8), s.state(), s.selectedPair(), s.remoteSlot().fps(),
-						s.remoteSlot().sourceSize(), s.remoteAudioFormat(), s.remoteAudioCallbacksPerSecond(), s.remoteAudioPeak()));
-			}
+			List<String> lines = statsLines(engine);
 			feedback(lines);
 			lines.forEach(line -> CraftOffice.LOGGER.info("[stats] {}", line));
 		});
 		return 1;
+	}
+
+	private static List<String> statsLines(MediaEngine engine) {
+		List<String> lines = new java.util.ArrayList<>();
+		lines.add("webrtc-java: " + (engine.ready() ? "carregada em " + engine.loadMillis() + " ms" : "falhou: " + engine.loadError()));
+		lines.add(String.format("Câmera: %s, %.1f fps, origem %s, jogo %d fps", engine.videoOn() ? "ligada" : "desligada",
+				engine.selfSlot().fps(), engine.selfSlot().sourceSize(), Minecraft.getInstance().getFps()));
+		for (PeerSession s : engine.sessions().values()) {
+			lines.add(String.format("%s: %s, par %s, vídeo %.1f fps %s, áudio %s, %.0f callbacks/s, pico %d",
+					s.peer().toString().substring(0, 8), s.state(), s.selectedPair(), s.remoteSlot().fps(),
+					s.remoteSlot().sourceSize(), s.remoteAudioFormat(), s.remoteAudioCallbacksPerSecond(), s.remoteAudioPeak()));
+		}
+		return lines;
 	}
 
 	private static void feedback(List<String> lines) {
