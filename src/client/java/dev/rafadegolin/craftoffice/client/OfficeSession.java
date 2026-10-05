@@ -14,6 +14,7 @@ import dev.rafadegolin.craftoffice.client.media.PeerSession;
 import dev.rafadegolin.craftoffice.client.ui.ConsentScreen;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
+import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.StatePayload;
 
 /**
@@ -29,6 +30,8 @@ public final class OfficeSession {
 
 	/** Vizinhos atuais segundo o servidor, com a permissão de vídeo de cada um. */
 	private static final Map<UUID, Boolean> neighbors = new HashMap<>();
+	/** Microfone e câmera de cada vizinho, repassados pelo servidor. */
+	private static final Map<UUID, PeerStatePayload> peerStates = new HashMap<>();
 
 	private OfficeSession() {
 	}
@@ -40,6 +43,7 @@ public final class OfficeSession {
 		consent = false;
 		consentScreenPending = false;
 		neighbors.clear();
+		peerStates.clear();
 	}
 
 	public static void onConfig(ConfigPayload payload) {
@@ -115,6 +119,7 @@ public final class OfficeSession {
 			}
 			case REMOVE -> {
 				neighbors.remove(peer);
+				peerStates.remove(peer);
 				engine.run(() -> engine.closeSession(peer));
 			}
 			case UPDATE -> {
@@ -128,6 +133,23 @@ public final class OfficeSession {
 				});
 			}
 		}
+	}
+
+	public static void onPeerState(PeerStatePayload payload) {
+		if (neighbors.containsKey(payload.peer())) {
+			peerStates.put(payload.peer(), payload);
+		}
+	}
+
+	/** O vizinho está com a câmera ligada. */
+	public static boolean peerCameraOn(UUID peer) {
+		PeerStatePayload state = peerStates.get(peer);
+		return state != null && state.camera();
+	}
+
+	public static boolean peerMicOn(UUID peer) {
+		PeerStatePayload state = peerStates.get(peer);
+		return state != null && state.mic();
 	}
 
 	public static boolean isNeighbor(UUID peer) {

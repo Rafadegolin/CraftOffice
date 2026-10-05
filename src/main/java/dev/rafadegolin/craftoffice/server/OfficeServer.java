@@ -19,6 +19,7 @@ import dev.rafadegolin.craftoffice.CraftOffice;
 import dev.rafadegolin.craftoffice.config.ServerConfig;
 import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
+import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 import dev.rafadegolin.craftoffice.net.StatePayload;
 import dev.rafadegolin.craftoffice.proximity.ProximityEngine;
@@ -90,8 +91,17 @@ public final class OfficeServer {
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(StatePayload.TYPE, (payload, context) -> {
-			if (enabled(context.player())) {
-				states.put(context.player().getUUID(), payload);
+			ServerPlayer player = context.player();
+			if (!enabled(player)) {
+				return;
+			}
+			states.put(player.getUUID(), payload);
+			// Os vizinhos veem na hora quem ligou câmera ou microfone.
+			for (UUID neighbor : engine.neighbors(player.getUUID())) {
+				ServerPlayer target = context.server().getPlayerList().getPlayer(neighbor);
+				if (target != null && enabled(target)) {
+					ServerPlayNetworking.send(target, peerState(player.getUUID()));
+				}
 			}
 		});
 
@@ -124,8 +134,16 @@ public final class OfficeServer {
 			if (target != null && enabled(target)) {
 				PeerPayload.Action action = PeerPayload.Action.valueOf(change.action().name());
 				ServerPlayNetworking.send(target, new PeerPayload(action, change.peer(), change.initiator(), change.video()));
+				if (action == PeerPayload.Action.ADD) {
+					ServerPlayNetworking.send(target, peerState(change.peer()));
+				}
 			}
 		}
+	}
+
+	private static PeerStatePayload peerState(UUID player) {
+		StatePayload state = states.get(player);
+		return new PeerStatePayload(player, state != null && state.mic(), state != null && state.camera());
 	}
 
 	/** Tem o mod, aceitou o consentimento e está vivo. Espectadores ficam de fora. */

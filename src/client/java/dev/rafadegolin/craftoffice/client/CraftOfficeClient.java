@@ -17,6 +17,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -27,13 +28,17 @@ import dev.rafadegolin.craftoffice.CraftOffice;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.PeerSession;
 import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
+import dev.rafadegolin.craftoffice.client.render.VideoBillboards;
 import dev.rafadegolin.craftoffice.client.render.VideoHud;
+import dev.rafadegolin.craftoffice.client.render.VideoTexture;
+import dev.rafadegolin.craftoffice.client.render.VideoTextures;
 import dev.rafadegolin.craftoffice.client.ui.Keys;
 import dev.rafadegolin.craftoffice.client.ui.OfficeActions;
 import dev.rafadegolin.craftoffice.client.ui.StatusHud;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
+import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 
 public class CraftOfficeClient implements ClientModInitializer {
@@ -61,6 +66,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 
 		HudElementRegistry.addLast(CraftOffice.id("status"), StatusHud::extract);
 		HudElementRegistry.addLast(CraftOffice.id("video"), hud::extract);
+		LevelRenderEvents.COLLECT_SUBMITS.register(VideoBillboards::collect);
 
 		// Servidor sem o mod não registra o hello: o mod fica quieto e nada quebra.
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
@@ -79,6 +85,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 		});
 
 		ClientPlayNetworking.registerGlobalReceiver(PeerPayload.TYPE, (payload, context) -> OfficeSession.onPeer(payload));
+		ClientPlayNetworking.registerGlobalReceiver(PeerStatePayload.TYPE, (payload, context) -> OfficeSession.onPeerState(payload));
 
 		ClientPlayNetworking.registerGlobalReceiver(SignalPayload.TYPE, (payload, context) -> {
 			// Só negocia com quem o servidor disse que é vizinho, e com consentimento.
@@ -206,6 +213,11 @@ public class CraftOfficeClient implements ClientModInitializer {
 		lines.add("webrtc-java: " + (engine.ready() ? "carregada em " + engine.loadMillis() + " ms" : "falhou: " + engine.loadError()));
 		lines.add(String.format("Câmera: %s, %.1f fps, origem %s, jogo %d fps", engine.videoOn() ? "ligada" : "desligada",
 				engine.selfSlot().fps(), engine.selfSlot().sourceSize(), Minecraft.getInstance().getFps()));
+		VideoTexture self = VideoTextures.self();
+		if (self != null) {
+			long[] upload = self.uploadMicros();
+			lines.add("Upload da textura 320x240: média " + upload[0] + " us, p95 " + upload[1] + " us");
+		}
 		lines.add(String.format("Microfone: %s, %s, pico %d. Saída: %s", engine.micName(),
 				engine.micOn() ? "ligado" : "desligado", engine.mic() != null ? engine.mic().peak() : 0, engine.speakerName()));
 		for (PeerSession s : engine.sessions().values()) {

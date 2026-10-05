@@ -3,10 +3,14 @@ package dev.rafadegolin.craftoffice.client.ui;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 
 import dev.rafadegolin.craftoffice.client.OfficeSession;
+import dev.rafadegolin.craftoffice.client.media.FrameSlot;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
+import dev.rafadegolin.craftoffice.client.render.VideoTexture;
+import dev.rafadegolin.craftoffice.client.render.VideoTextures;
 
 /** Painel do mod: estado, microfone, câmera e consentimento. */
 public final class PanelScreen extends Screen {
@@ -77,7 +81,29 @@ public final class PanelScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
 		super.extractRenderState(graphics, mouseX, mouseY, delta);
 		graphics.centeredText(font, title, width / 2, height / 2 - 88, WHITE);
+		drawPreview(graphics);
 		graphics.centeredText(font, statusLine(), width / 2, height / 2 - 72, GRAY);
+	}
+
+	/** Prévia da própria câmera à direita dos botões, enquanto ela está ligada. */
+	private void drawPreview(GuiGraphicsExtractor graphics) {
+		MediaEngine engine = MediaEngine.getIfLoaded();
+		if (engine == null || !engine.videoOn()) {
+			return;
+		}
+		VideoTextures.update();
+		VideoTexture self = VideoTextures.self();
+		int w = 128;
+		int h = w * FrameSlot.HEIGHT / FrameSlot.WIDTH;
+		int x = width / 2 + 108;
+		int y = height / 2 - 52;
+		if (self == null || x + w > width - 4) {
+			return;
+		}
+		graphics.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF000000);
+		graphics.blit(RenderPipelines.GUI_TEXTURED, self.id(), x, y, 0, 0, w, h,
+				FrameSlot.WIDTH, FrameSlot.HEIGHT, FrameSlot.WIDTH, FrameSlot.HEIGHT);
+		graphics.centeredText(font, Component.translatable("craftoffice.panel.preview"), x + w / 2, y + h + 3, GRAY);
 	}
 
 	private Component statusLine() {

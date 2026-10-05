@@ -23,10 +23,12 @@
 	"craftoffice.panel.consent": "Read and accept consent",
 	"craftoffice.panel.revoke": "Withdraw consent",
 	"craftoffice.panel.panic": "Stop all",
+	"craftoffice.panel.preview": "How others see you",
 
 	"craftoffice.hud.mic": "MIC",
 	"craftoffice.hud.camera": "CAM",
 	"craftoffice.hud.screen": "SCREEN",
+	"craftoffice.hud.you": "You",
 	"craftoffice.hud.off": "CraftOffice off. %s opens the panel",
 
 	"craftoffice.status.mic_on": "Microphone on",

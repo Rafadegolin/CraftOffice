@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
+import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 import dev.rafadegolin.craftoffice.net.StatePayload;
 import dev.rafadegolin.craftoffice.server.OfficeServer;
@@ -20,7 +21,7 @@ public class CraftOffice implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	/** Versão dos avisos entre cliente e servidor. Sobe a cada mudança incompatível. */
-	public static final int PROTOCOL = 2;
+	public static final int PROTOCOL = 3;
 
 	@Override
 	public void onInitialize() {
@@ -28,6 +29,7 @@ public class CraftOffice implements ModInitializer {
 		PayloadTypeRegistry.clientboundPlay().register(ConfigPayload.TYPE, ConfigPayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(StatePayload.TYPE, StatePayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(PeerPayload.TYPE, PeerPayload.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(PeerStatePayload.TYPE, PeerStatePayload.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(SignalPayload.TYPE, SignalPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(SignalPayload.TYPE, SignalPayload.CODEC);
 

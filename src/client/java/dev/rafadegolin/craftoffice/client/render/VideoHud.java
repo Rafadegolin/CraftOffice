@@ -1,109 +1,84 @@
 package dev.rafadegolin.craftoffice.client.render;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
 
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
 
-import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.client.OfficeSession;
+import dev.rafadegolin.craftoffice.client.media.FrameSlot;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.PeerSession;
+import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
 
 /**
- * HUD da Fase 0: a própria câmera e o vídeo de cada sessão, com os números
- * que a prova de conceito precisa medir.
+ * Grade de vídeos no canto superior direito: a própria câmera e cada vizinho
+ * com câmera ligada. Nome embaixo e borda verde em quem está falando.
  */
 public final class VideoHud {
-	private static final int TILE_W = 160;
-	private static final int TILE_H = 120;
-	private static final int WHITE = 0xFFFFFFFF;
+	private static final int TILE_W = 96;
+	private static final int TILE_H = TILE_W * FrameSlot.HEIGHT / FrameSlot.WIDTH;
+	private static final int GAP = 4;
+	private static final int LABEL_H = 10;
+	private static final int BORDER = 0xFF000000;
+	private static final int SPEAKING = 0xFF4CAF50;
+	private static final int TEXT = 0xFFFFFFFF;
 
-	private VideoTexture self;
-	private final Map<UUID, VideoTexture> remotes = new HashMap<>();
-
-	/** Envia frames novos para as texturas. Chamado no fim de cada tick do cliente e antes de desenhar. */
-	public void upload() {
-		MediaEngine engine = MediaEngine.getIfLoaded();
-		if (engine == null) {
-			return;
-		}
-
-		if (engine.videoOn()) {
-			if (self == null) {
-				self = new VideoTexture(CraftOffice.id("video/self"));
-			}
-			self.update(engine.selfSlot());
-		}
-
-		remotes.entrySet().removeIf(entry -> {
-			if (!engine.sessions().containsKey(entry.getKey())) {
-				entry.getValue().close();
-				return true;
-			}
-			return false;
-		});
-		for (PeerSession session : engine.sessions().values()) {
-			VideoTexture texture = remotes.computeIfAbsent(session.peer(),
-					id -> new VideoTexture(CraftOffice.id("video/" + id)));
-			texture.update(session.remoteSlot());
-		}
+	private record Tile(VideoTexture texture, String name, boolean speaking) {
 	}
 
 	public void extract(GuiGraphicsExtractor graphics, DeltaTracker delta) {
 		MediaEngine engine = MediaEngine.getIfLoaded();
-		if (engine == null) {
+		if (engine == null || !OfficeSession.active()) {
 			return;
 		}
-		upload();
+		VideoTextures.update();
 
 		Minecraft mc = Minecraft.getInstance();
-		int x = graphics.guiWidth() - TILE_W - 8;
-		int y = 8;
-
-		if (engine.loadError() != null) {
-			graphics.text(mc.font, "webrtc-java falhou: " + engine.loadError(), 8, 8, 0xFFFF5555);
-			return;
-		}
-
+		List<Tile> tiles = new ArrayList<>();
+		VideoTexture self = VideoTextures.self();
 		if (engine.videoOn() && self != null) {
-			drawTile(graphics, self, x, y);
-			long[] upload = self.uploadMicros();
-			graphics.text(mc.font, String.format("eu  %.0f fps  %s", engine.selfSlot().fps(), engine.selfSlot().sourceSize()), x, y + TILE_H + 2, WHITE);
-			graphics.text(mc.font, "upload " + upload[0] + " us  p95 " + upload[1] + " us", x, y + TILE_H + 12, WHITE);
-			graphics.text(mc.font, "jogo " + mc.getFps() + " fps", x, y + TILE_H + 22, WHITE);
-			y += TILE_H + 36;
+			boolean speaking = engine.mic() != null && engine.mic().speaking();
+			tiles.add(new Tile(self, Component.translatable("craftoffice.hud.you").getString(), speaking));
 		}
-
 		for (PeerSession session : engine.sessions().values()) {
-			VideoTexture texture = remotes.get(session.peer());
-			if (texture != null) {
-				drawTile(graphics, texture, x, y);
+			VideoTexture texture = VideoTextures.remote(session.peer());
+			if (texture == null || !VideoBillboards.showsVideo(session)) {
+				continue;
 			}
 			PlayerInfo info = mc.getConnection() != null ? mc.getConnection().getPlayerInfo(session.peer()) : null;
 			String name = info != null ? info.getProfile().name() : session.peer().toString().substring(0, 8);
-			graphics.text(mc.font, String.format("%s  %s  %.0f fps", name, session.state(), session.remoteSlot().fps()), x, y + TILE_H + 2, WHITE);
-			graphics.text(mc.font, String.format("áudio %.0f/s  pico %d", session.remoteAudioCallbacksPerSecond(), session.remoteAudioPeak()), x, y + TILE_H + 12, WHITE);
-			y += TILE_H + 26;
+			PeerAudio audio = engine.mixer() != null ? engine.mixer().peerIfPresent(session.peer()) : null;
+			tiles.add(new Tile(texture, name, audio != null && audio.speaking()));
+		}
+
+		// Uma coluna à direita; se não couber na altura, abre outra à esquerda.
+		int perColumn = Math.max(1, (graphics.guiHeight() - GAP) / (TILE_H + LABEL_H + GAP));
+		for (int i = 0; i < tiles.size(); i++) {
+			int column = i / perColumn;
+			int row = i % perColumn;
+			int x = graphics.guiWidth() - (column + 1) * (TILE_W + GAP);
+			int y = GAP + row * (TILE_H + LABEL_H + GAP);
+			drawTile(graphics, mc, tiles.get(i), x, y);
 		}
 	}
 
-	private static void drawTile(GuiGraphicsExtractor graphics, VideoTexture texture, int x, int y) {
-		graphics.fill(x - 1, y - 1, x + TILE_W + 1, y + TILE_H + 1, 0xFF000000);
-		graphics.blit(RenderPipelines.GUI_TEXTURED, texture.id(), x, y, 0, 0, TILE_W, TILE_H,
-				320, 240, 320, 240);
+	private static void drawTile(GuiGraphicsExtractor graphics, Minecraft mc, Tile tile, int x, int y) {
+		int border = tile.speaking() ? SPEAKING : BORDER;
+		int thickness = tile.speaking() ? 2 : 1;
+		graphics.fill(x - thickness, y - thickness, x + TILE_W + thickness, y + TILE_H + thickness, border);
+		graphics.blit(RenderPipelines.GUI_TEXTURED, tile.texture().id(), x, y, 0, 0, TILE_W, TILE_H,
+				FrameSlot.WIDTH, FrameSlot.HEIGHT, FrameSlot.WIDTH, FrameSlot.HEIGHT);
+		String name = mc.font.plainSubstrByWidth(tile.name(), TILE_W);
+		graphics.text(mc.font, name, x + (TILE_W - mc.font.width(name)) / 2, y + TILE_H + 2, TEXT);
 	}
 
 	public void clear() {
-		if (self != null) {
-			self.close();
-			self = null;
-		}
-		remotes.values().forEach(VideoTexture::close);
-		remotes.clear();
+		VideoTextures.clear();
 	}
 }

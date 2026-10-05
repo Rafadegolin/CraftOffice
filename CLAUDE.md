@@ -39,6 +39,8 @@ Os modelos ainda escrevem os nomes antigos. Na dúvida, conferir com `javap` nos
 | `options.hideGui` | Não existe; elementos do `HudElementRegistry` já somem com F1 |
 | Access widener | Class tweaker (`.classtweaker`) |
 | `PlayerRenderState` para outros players | `AvatarRenderState`; `PlayerRenderState` é só o jogador local |
+| `PoseStack.mulPose(Quaternionf)` | `PoseStack.rotate(Quaternionfc)` |
+| `RenderType.text(...)` | `RenderTypes.text(...)` (pacote `rendertype`) |
 
 ## webrtc-java (0.19.0)
 
