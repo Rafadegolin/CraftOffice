@@ -100,6 +100,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 			MediaEngine engine = MediaEngine.getIfLoaded();
 			if (engine != null) {
 				engine.shutdownAndWait(3000);
+				startExitGuard(Thread.currentThread());
 			}
 		});
 
@@ -193,6 +194,29 @@ public class CraftOfficeClient implements ClientModInitializer {
 					s.remoteSlot().sourceSize(), s.remoteAudioFormat(), s.remoteAudioCallbacksPerSecond(), s.remoteAudioPeak()));
 		}
 		return lines;
+	}
+
+	/**
+	 * A captura da webcam deixa uma thread nativa presa à JVM como não-daemon,
+	 * mesmo depois de liberada, e o processo não termina. Quando a thread
+	 * principal do jogo acaba, espera 2 s e encerra a JVM pelo caminho normal,
+	 * com os ganchos de saída. Se nada estiver preso, a JVM sai antes e esta
+	 * thread, que é daemon, morre junto.
+	 */
+	private static void startExitGuard(Thread mainThread) {
+		Thread guard = new Thread(() -> {
+			try {
+				mainThread.join();
+				Thread.sleep(2000);
+			}
+			catch (InterruptedException e) {
+				return;
+			}
+			CraftOffice.LOGGER.info("Thread nativa ainda presa ao sair. Encerrando a JVM");
+			System.exit(0);
+		}, "craftoffice-exit-guard");
+		guard.setDaemon(true);
+		guard.start();
 	}
 
 	private static void feedback(List<String> lines) {
