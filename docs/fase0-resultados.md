@@ -22,33 +22,39 @@ Prova de conceito do estudo `CraftOffice estudo do mod de escritório virtual (F
 | Jar único funciona? | O loader extrai `webrtc-java-<sistema>-<arquitetura>` pelo nome, então os nativos de vários sistemas convivem no mesmo jar sem conflito. Falta testar em Linux |
 | Volume por pessoa | **Não há `setVolume` na API.** Mas cada faixa remota aceita `AudioTrackSink`, que entrega o PCM daquela pessoa. Caminho: `HeadlessAudioDeviceModule` + mixer próprio com ganho por pessoa (ou OpenAL do jogo). Precisa de experimento na Fase 3 |
 
-## A medir no jogo
-
-Preencher depois do roteiro abaixo.
+## Medido no jogo
 
 | Pergunta | Resultado |
 | --- | --- |
 | Própria câmera na HUD, fps | **20 fps**, já chegando em 320×240 da câmera integrada |
-| Cópia + `upload()` de 320×240, média e p95 | **78 µs, p95 102 µs**. A 20 fps, cerca de 0,16% de um frame de 16,7 ms. Quatro vídeos ficariam abaixo de 0,5 ms por segundo de jogo |
-| FPS do jogo com câmera ligada vs. desligada | 60 fps com câmera ligada. Parece limitado pelo VSync, então ainda não mostra o custo real. Medir com VSync desligado |
-| Cores corretas (rosto não azulado)? | **Sim.** `FourCC.ABGR` bate com a `NativeImage` |
-| Conexão fecha entre dois clientes? Tipo de par (host/srflx) | **Sim.** `CONNECTED` em menos de 1 s, par `host` na rede local (192.168.10.17). Sinalização pelo servidor funcionou de primeira |
-| Vídeo chega no outro cliente, fps | **Sim, do Player1 para o Player2: 19 a 20 fps em 320×240** durante 1 minuto. No sentido contrário não chegou: quem atendia criava as faixas antes de ler a oferta. Corrigido, falta retestar |
-| Áudio chega no outro (callbacks/s e pico > 0 ao falar) | Chega como fluxo: 48 kHz, mono, 16 bits, 100 callbacks/s. Mas **pico 0 o tempo todo**: silêncio digital. Provável microfone errado (o primeiro da lista é "Microfone Externo", entrada vazia). Agora usa o padrão do Windows e `/office mic <n>` troca. Falta retestar |
-| Jogo fecha sem travar? | Não, no primeiro teste: a thread nativa segurava o processo. Corrigido com o encerramento da mídia, falta retestar |
+| Cópia + `upload()` de 320×240, média e p95 | **78 µs, p95 102 µs**. A 60 fps, menos de 1% do tempo de um frame. Quatro vídeos cabem com folga |
+| FPS do jogo com câmera ligada vs. desligada | 60 fps com câmera ligada, limitado pelo VSync. Custo real ainda não medido: fica para a Fase 4, com VSync desligado |
+| Cores corretas? | **Sim.** `FourCC.ABGR` bate com a `NativeImage` |
+| Conexão fecha entre dois clientes? | **Sim.** `CONNECTED` em menos de 1 s, par `host` na rede local. Sinalização pelo servidor funcionou de primeira |
+| Vídeo chega nos dois sentidos, fps | **Sim. 19,6 a 20,2 fps em 320×240 nos dois sentidos** (webcam de um lado, padrão sintético do outro) |
+| Áudio chega nos dois sentidos | **Sim.** 48 kHz, mono, 16 bits, 100 callbacks/s. Pico de 6828 (de 32767) no Player2 com fala no Player1. O microfone padrão do Windows é o certo; no primeiro teste ninguém falou |
+| Jogo fecha sem travar? | **Sim**, com duas correções: encerrar a mídia ao fechar e uma guarda de saída. A captura da webcam deixa uma thread nativa não-daemon presa à JVM, e a guarda chama `System.exit(0)` 2 s depois do fim da thread principal |
+
+## O que a Fase 0 ensinou
+
+- **Quem atende só anexa faixas depois de ler a oferta**, com `addTrack`. Transceptores criados antes não se casam com os da oferta e a resposta sai só para receber.
+- **Faixas não podem ser destruídas enquanto a fábrica vive.** As conexões seguram referência mesmo fechadas. A faixa de vídeo é criada uma vez e desligar só para a captura.
+- **Escolher os dispositivos explicitamente.** A ordem das câmeras muda entre processos (o OBS apareceu primeiro num deles) e câmeras virtuais sem formato precisam ser ignoradas.
+- **Thread nativa da webcam segura a JVM.** Vale abrir um issue na webrtc-java com o caso mínimo.
+- **Volume por pessoa:** sem `setVolume`, mas o PCM de cada pessoa chega por `AudioTrackSink`. A Fase 3 testa `HeadlessAudioDeviceModule` com mixer próprio.
 
 ## Roteiro do teste
 
-1. `./gradlew runClient` abre o Player1. Criar um mundo e apertar **V**. O quadro do canto superior direito mostra o rosto, os fps da câmera, o tempo de upload e o fps do jogo.
-2. Anotar fps com V ligado e desligado. Se o rosto aparecer azulado, trocar `FourCC.ABGR` por `FourCC.RGBA` em `FrameSlot`.
-3. No Player1: Esc → Abrir para LAN.
-4. `./gradlew runClient2` abre o Player2, com padrão de teste no lugar da câmera. Entrar no mundo pela lista de LAN.
-5. No Player1: `/office call Player2`. Os dois veem o vídeo um do outro na HUD.
-6. `/office stats` nos dois. Anota estado, par selecionado, fps do vídeo remoto e áudio. Falar no microfone e ver o pico subir.
-7. `/office hangup` encerra.
+1. `./gradlew runClient` abre o Player1. Criar um mundo e apertar **V**.
+2. Esc → Abrir para LAN.
+3. `./gradlew runClient2` abre o Player2, com padrão de teste no lugar da câmera. Entrar pela lista de LAN.
+4. No Player1: `/office call Player2`. Os números vão para o log a cada 5 s (`[auto]`).
+5. Se o pico do áudio ficar em 0, `/office devices` e `/office mic <n>`.
 
-Alternativa ao LAN: `./gradlew runServer` com `eula=true` em `run/eula.txt` e `online-mode=false` em `run/server.properties`, e entrar em `localhost` com os dois clientes.
+Alternativa ao LAN: `./gradlew runServer` com `eula=true` em `run/eula.txt` e `online-mode=false` em `run/server.properties`.
 
 ## Decisão do portão
 
-Parcial: o risco que derrubaria o plano (biblioteca não carregar no Fabric) não se confirmou. A decisão final depende da tabela "A medir no jogo".
+**Aprovado.** A webrtc-java carrega no Fabric 26.3, o frame vira textura a 20 fps com custo desprezível, e dois clientes trocam áudio e vídeo nos dois sentidos com a sinalização pelo servidor do jogo. O plano segue como no estudo, a partir da Fase 1.
+
+Pendências que não bloqueiam: medir o FPS sem VSync (Fase 4), testar o jar em Linux (Fase 7) e testar entre duas máquinas, com webcam dos dois lados.
