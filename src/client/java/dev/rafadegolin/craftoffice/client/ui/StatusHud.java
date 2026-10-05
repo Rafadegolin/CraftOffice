@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
 
+import dev.rafadegolin.craftoffice.OfficeStatus;
 import dev.rafadegolin.craftoffice.client.OfficeSession;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
@@ -51,7 +52,14 @@ public final class StatusHud {
 			graphics.fill(micX, y + 12, x - 3, y + 13, SPEAKING);
 		}
 		x = badge(graphics, mc, Component.translatable("craftoffice.hud.camera"), cameraOn, x, y);
-		badge(graphics, mc, Component.translatable("craftoffice.hud.screen"), false, x, y);
+		x = badge(graphics, mc, Component.translatable("craftoffice.hud.screen"), false, x, y);
+		OfficeStatus status = OfficeSession.status();
+		if (status != OfficeStatus.AVAILABLE) {
+			Component label = Component.translatable(status.translationKey());
+			int w = mc.font.width(label) + 8;
+			graphics.fill(x, y, x + w, y + 12, (status.color() & 0x00FFFFFF) | 0xCC000000);
+			graphics.text(mc.font, label, x + 4, y + 2, TEXT_ON, false);
+		}
 
 		if (engine != null && engine.mixer() != null) {
 			neighbors(graphics, mc, engine, 4, y + 18);

@@ -11,6 +11,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import net.minecraft.client.Minecraft;
 
+import dev.rafadegolin.craftoffice.OfficeStatus;
+
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.PeerSession;
 import dev.rafadegolin.craftoffice.client.ui.ConsentScreen;
@@ -18,6 +20,7 @@ import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
 import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.StatePayload;
+import dev.rafadegolin.craftoffice.net.StatusesPayload;
 
 /**
  * Estado do CraftOffice no servidor atual. O mod só funciona quando o servidor
@@ -29,6 +32,10 @@ public final class OfficeSession {
 	private static String serverKey;
 	private static boolean consent;
 	private static boolean consentScreenPending;
+	/** Status próprio. Volta a disponível a cada entrada no servidor. */
+	private static OfficeStatus status = OfficeStatus.AVAILABLE;
+	/** Status dos outros players com o mod; ausente é disponível. */
+	private static Map<UUID, OfficeStatus> statuses = Map.of();
 
 	/** Vizinhos atuais segundo o servidor, com a permissão de vídeo de cada um. */
 	private static final Map<UUID, Boolean> neighbors = new HashMap<>();
@@ -47,6 +54,8 @@ public final class OfficeSession {
 		consent = false;
 		consentScreenPending = false;
 		neighbors.clear();
+		status = OfficeStatus.AVAILABLE;
+		statuses = Map.of();
 		peerStates.clear();
 		fullVolume.clear();
 	}
@@ -92,8 +101,25 @@ public final class OfficeSession {
 	/** Conta ao servidor se este player participa e o que está transmitindo. */
 	public static void sendState(boolean mic, boolean camera) {
 		if (config != null && ClientPlayNetworking.canSend(StatePayload.TYPE)) {
-			ClientPlayNetworking.send(new StatePayload(consent, consent && mic, consent && camera));
+			ClientPlayNetworking.send(new StatePayload(consent, consent && mic, consent && camera, status));
 		}
+	}
+
+	public static OfficeStatus status() {
+		return status;
+	}
+
+	public static void setStatus(OfficeStatus value) {
+		status = value;
+		sendState();
+	}
+
+	public static void onStatuses(StatusesPayload payload) {
+		statuses = Map.copyOf(payload.statuses());
+	}
+
+	public static OfficeStatus statusOf(UUID player) {
+		return statuses.getOrDefault(player, OfficeStatus.AVAILABLE);
 	}
 
 	public static void sendState() {

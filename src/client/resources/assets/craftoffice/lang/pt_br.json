@@ -23,6 +23,7 @@
 	"craftoffice.panel.consent": "Ler e aceitar o consentimento",
 	"craftoffice.panel.revoke": "Retirar consentimento",
 	"craftoffice.panel.panic": "Cortar tudo",
+	"craftoffice.panel.status_button": "Status: %s",
 	"craftoffice.panel.preview": "Como os outros te veem",
 
 	"craftoffice.hud.mic": "MIC",
@@ -30,6 +31,12 @@
 	"craftoffice.hud.screen": "TELA",
 	"craftoffice.hud.you": "Você",
 	"craftoffice.hud.off": "CraftOffice desligado. %s abre o painel",
+
+	"craftoffice.status_name.available": "Disponível",
+	"craftoffice.status_name.busy": "Ocupado",
+	"craftoffice.status_name.focus": "Foco",
+	"craftoffice.status_name.do_not_disturb": "Não perturbe",
+	"block.craftoffice.stage": "Palco",
 
 	"craftoffice.zone.entered": "Entrou na sala %s",
 	"craftoffice.zone.left": "Saiu da sala %s",

@@ -23,6 +23,7 @@
 	"craftoffice.panel.consent": "Read and accept consent",
 	"craftoffice.panel.revoke": "Withdraw consent",
 	"craftoffice.panel.panic": "Stop all",
+	"craftoffice.panel.status_button": "Status: %s",
 	"craftoffice.panel.preview": "How others see you",
 
 	"craftoffice.hud.mic": "MIC",
@@ -30,6 +31,12 @@
 	"craftoffice.hud.screen": "SCREEN",
 	"craftoffice.hud.you": "You",
 	"craftoffice.hud.off": "CraftOffice off. %s opens the panel",
+
+	"craftoffice.status_name.available": "Available",
+	"craftoffice.status_name.busy": "Busy",
+	"craftoffice.status_name.focus": "Focus",
+	"craftoffice.status_name.do_not_disturb": "Do not disturb",
+	"block.craftoffice.stage": "Stage",
 
 	"craftoffice.zone.entered": "Entered room %s",
 	"craftoffice.zone.left": "Left room %s",

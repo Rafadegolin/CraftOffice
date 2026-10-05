@@ -65,11 +65,19 @@ public final class VideoBillboards {
 				&& session.remoteSlot().fps() > 0;
 	}
 
+	/** Cresce um pouco com a distância, para continuar legível de longe. */
+	private static float scaleFor(CameraRenderState camera, Vec3 pos) {
+		return (float) Math.clamp(1 + (camera.pos.distanceTo(pos) - 3) * 0.06, 1, 1.4);
+	}
+
+	/** Altura do topo do vídeo acima da cabeça, para o status ficar logo acima dele. */
+	public static double topOffset(CameraRenderState camera, Vec3 pos) {
+		return ABOVE_HEAD + HEIGHT * scaleFor(camera, pos);
+	}
+
 	private static void draw(LevelRenderContext context, CameraRenderState camera, Player player, VideoTexture texture, float partial) {
 		Vec3 pos = player.getPosition(partial);
-		double distance = camera.pos.distanceTo(pos);
-		// Cresce um pouco com a distância, para continuar legível de longe.
-		float scale = (float) Math.clamp(1 + (distance - 3) * 0.06, 1, 1.4);
+		float scale = scaleFor(camera, pos);
 		float halfWidth = WIDTH * scale / 2;
 		float height = HEIGHT * scale;
 

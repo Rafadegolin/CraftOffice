@@ -20,6 +20,7 @@ public final class PanelScreen extends Screen {
 	private Button mic;
 	private Button camera;
 	private Button audio;
+	private Button status;
 
 	public PanelScreen() {
 		super(Component.translatable("craftoffice.panel.title"));
@@ -28,14 +29,16 @@ public final class PanelScreen extends Screen {
 	@Override
 	protected void init() {
 		int x = width / 2 - 100;
-		int y = height / 2 - 52;
+		int y = height / 2 - 64;
 
 		mic = addRenderableWidget(Button.builder(Component.empty(), button -> OfficeActions.toggleMic())
 				.bounds(x, y, 200, 20).build());
 		camera = addRenderableWidget(Button.builder(Component.empty(), button -> OfficeActions.toggleCamera())
 				.bounds(x, y + 24, 200, 20).build());
-		audio = addRenderableWidget(Button.builder(Component.empty(), button -> OfficeActions.toggleAudio())
+		status = addRenderableWidget(Button.builder(Component.empty(), button -> OfficeSession.setStatus(OfficeSession.status().next()))
 				.bounds(x, y + 48, 200, 20).build());
+		audio = addRenderableWidget(Button.builder(Component.empty(), button -> OfficeActions.toggleAudio())
+				.bounds(x, y + 72, 200, 20).build());
 
 		boolean consent = OfficeSession.hasConsent();
 		addRenderableWidget(Button.builder(Component.translatable(consent ? "craftoffice.panel.revoke" : "craftoffice.panel.consent"), button -> {
@@ -46,12 +49,12 @@ public final class PanelScreen extends Screen {
 			else {
 				minecraft.gui.setScreen(new ConsentScreen(OfficeSession.config()));
 			}
-		}).bounds(x, y + 72, 200, 20).build()).active = OfficeSession.serverHasMod();
+		}).bounds(x, y + 96, 200, 20).build()).active = OfficeSession.serverHasMod();
 
 		addRenderableWidget(Button.builder(Component.translatable("craftoffice.panel.panic"), button -> OfficeActions.stopAll())
-				.bounds(x, y + 96, 98, 20).build());
+				.bounds(x, y + 120, 98, 20).build());
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
-				.bounds(x + 102, y + 96, 98, 20).build());
+				.bounds(x + 102, y + 120, 98, 20).build());
 
 		updateLabels();
 	}
@@ -73,6 +76,8 @@ public final class PanelScreen extends Screen {
 		boolean audioOn = engine != null && engine.audioEnabled();
 		audio.setMessage(Component.translatable(audioOn ? "craftoffice.panel.audio_on" : "craftoffice.panel.audio_off"));
 		audio.active = engine != null && engine.ready();
+		status.setMessage(Component.translatable("craftoffice.panel.status_button", Component.translatable(OfficeSession.status().translationKey())));
+		status.active = OfficeSession.active();
 		mic.active = active && audioOn;
 		camera.active = active;
 	}
@@ -80,9 +85,9 @@ public final class PanelScreen extends Screen {
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
 		super.extractRenderState(graphics, mouseX, mouseY, delta);
-		graphics.centeredText(font, title, width / 2, height / 2 - 88, WHITE);
+		graphics.centeredText(font, title, width / 2, height / 2 - 100, WHITE);
 		drawPreview(graphics);
-		graphics.centeredText(font, statusLine(), width / 2, height / 2 - 72, GRAY);
+		graphics.centeredText(font, statusLine(), width / 2, height / 2 - 84, GRAY);
 	}
 
 	/** Prévia da própria câmera à direita dos botões, enquanto ela está ligada. */
@@ -96,7 +101,7 @@ public final class PanelScreen extends Screen {
 		int w = 128;
 		int h = w * FrameSlot.HEIGHT / FrameSlot.WIDTH;
 		int x = width / 2 + 108;
-		int y = height / 2 - 52;
+		int y = height / 2 - 64;
 		if (self == null || x + w > width - 4) {
 			return;
 		}

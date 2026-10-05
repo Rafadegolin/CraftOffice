@@ -1,6 +1,7 @@
 package dev.rafadegolin.craftoffice.server;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,12 +18,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.OfficeBlocks;
+import dev.rafadegolin.craftoffice.OfficeStatus;
 import dev.rafadegolin.craftoffice.config.ServerConfig;
 import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
 import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 import dev.rafadegolin.craftoffice.net.StatePayload;
+import dev.rafadegolin.craftoffice.net.StatusesPayload;
 import dev.rafadegolin.craftoffice.proximity.ProximityEngine;
 import dev.rafadegolin.craftoffice.zone.Zone;
 import dev.rafadegolin.craftoffice.zone.ZoneCommands;
@@ -90,6 +94,8 @@ public final class OfficeServer {
 			if (zones != null) {
 				zones.forget(id);
 			}
+			// Depois de sair da lista, para o status de quem saiu sumir para os outros.
+			server.execute(() -> broadcastStatuses(server));
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(HelloPayload.TYPE, (payload, context) -> {
@@ -104,6 +110,7 @@ public final class OfficeServer {
 			if (zones != null) {
 				ServerPlayNetworking.send(player, zones.payload());
 			}
+			ServerPlayNetworking.send(player, statusesPayload());
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(StatePayload.TYPE, (payload, context) -> {
@@ -111,7 +118,10 @@ public final class OfficeServer {
 			if (!enabled(player)) {
 				return;
 			}
-			states.put(player.getUUID(), payload);
+			StatePayload previous = states.put(player.getUUID(), payload);
+			if (previous == null || previous.status() != payload.status()) {
+				broadcastStatuses(context.server());
+			}
 			// Os vizinhos veem na hora quem ligou câmera ou microfone.
 			for (UUID neighbor : engine.neighbors(player.getUUID())) {
 				ServerPlayer target = context.server().getPlayerList().getPlayer(neighbor);
@@ -155,7 +165,8 @@ public final class OfficeServer {
 			if (participates(player)) {
 				Zone zone = zones.zoneOf(player);
 				positions.add(new ProximityEngine.Position(player.getUUID(), ZoneManager.dimensionOf(player),
-						player.getX(), player.getY(), player.getZ(), zone != null ? zone.name().toLowerCase() : null, false, 1));
+						player.getX(), player.getY(), player.getZ(), zone != null ? zone.name().toLowerCase() : null,
+						onStage(player), radiusFactor(player)));
 			}
 		}
 
@@ -179,7 +190,41 @@ public final class OfficeServer {
 	/** Tem o mod, aceitou o consentimento e está vivo. Espectadores ficam de fora. */
 	private static boolean participates(ServerPlayer player) {
 		StatePayload state = states.get(player.getUUID());
-		return enabled(player) && state != null && state.active() && player.isAlive() && !player.isSpectator();
+		return enabled(player) && state != null && state.active() && state.status() != OfficeStatus.DO_NOT_DISTURB
+				&& player.isAlive() && !player.isSpectator();
+	}
+
+	/** Em pé sobre o bloco-palco. */
+	private static boolean onStage(ServerPlayer player) {
+		return player.level().getBlockState(player.blockPosition().below()).is(OfficeBlocks.STAGE)
+				|| player.level().getBlockState(player.blockPosition()).is(OfficeBlocks.STAGE);
+	}
+
+	/** Em foco, o alcance cai para {@link OfficeStatus#FOCUS_RADIUS} blocos. */
+	private static double radiusFactor(ServerPlayer player) {
+		StatePayload state = states.get(player.getUUID());
+		return state != null && state.status() == OfficeStatus.FOCUS
+				? Math.min(1, OfficeStatus.FOCUS_RADIUS / config.connectRadius)
+				: 1;
+	}
+
+	private static StatusesPayload statusesPayload() {
+		Map<UUID, OfficeStatus> statuses = new HashMap<>();
+		states.forEach((id, state) -> {
+			if (state.active() && state.status() != OfficeStatus.AVAILABLE) {
+				statuses.put(id, state.status());
+			}
+		});
+		return new StatusesPayload(statuses);
+	}
+
+	private static void broadcastStatuses(MinecraftServer server) {
+		StatusesPayload payload = statusesPayload();
+		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+			if (enabled(player)) {
+				ServerPlayNetworking.send(player, payload);
+			}
+		}
 	}
 
 	public static boolean enabled(ServerPlayer player) {

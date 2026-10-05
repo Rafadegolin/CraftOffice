@@ -28,6 +28,7 @@ import dev.rafadegolin.craftoffice.CraftOffice;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.PeerSession;
 import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
+import dev.rafadegolin.craftoffice.client.render.StatusTags;
 import dev.rafadegolin.craftoffice.client.render.VideoBillboards;
 import dev.rafadegolin.craftoffice.client.render.VideoHud;
 import dev.rafadegolin.craftoffice.client.render.VideoTexture;
@@ -41,6 +42,7 @@ import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.PeerPayload;
 import dev.rafadegolin.craftoffice.net.PeerStatePayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
+import dev.rafadegolin.craftoffice.net.StatusesPayload;
 import dev.rafadegolin.craftoffice.net.ZonesPayload;
 
 public class CraftOfficeClient implements ClientModInitializer {
@@ -71,6 +73,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 		HudElementRegistry.addLast(CraftOffice.id("video"), hud::extract);
 		LevelRenderEvents.COLLECT_SUBMITS.register(VideoBillboards::collect);
 		LevelRenderEvents.COLLECT_SUBMITS.register(ZoneOutlines::collect);
+		LevelRenderEvents.COLLECT_SUBMITS.register(StatusTags::collect);
 
 		// Servidor sem o mod não registra o hello: o mod fica quieto e nada quebra.
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
@@ -91,6 +94,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(PeerPayload.TYPE, (payload, context) -> OfficeSession.onPeer(payload));
 		ClientPlayNetworking.registerGlobalReceiver(PeerStatePayload.TYPE, (payload, context) -> OfficeSession.onPeerState(payload));
 		ClientPlayNetworking.registerGlobalReceiver(ZonesPayload.TYPE, (payload, context) -> ClientZones.onZones(payload));
+		ClientPlayNetworking.registerGlobalReceiver(StatusesPayload.TYPE, (payload, context) -> OfficeSession.onStatuses(payload));
 
 		ClientPlayNetworking.registerGlobalReceiver(SignalPayload.TYPE, (payload, context) -> {
 			// Só negocia com quem o servidor disse que é vizinho, e com consentimento.
