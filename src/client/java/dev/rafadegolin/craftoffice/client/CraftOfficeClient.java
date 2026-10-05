@@ -11,6 +11,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -83,6 +84,14 @@ public class CraftOfficeClient implements ClientModInitializer {
 				});
 			}
 			client.execute(hud::clear);
+		});
+
+		// Sem isso a thread nativa da WebRTC segura o processo e o jogo não fecha.
+		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+			MediaEngine engine = MediaEngine.getIfLoaded();
+			if (engine != null) {
+				engine.shutdownAndWait(3000);
+			}
 		});
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(

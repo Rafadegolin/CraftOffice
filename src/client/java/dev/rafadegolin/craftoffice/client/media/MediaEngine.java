@@ -147,54 +147,131 @@ public final class MediaEngine {
 		return lines;
 	}
 
-	/** Liga ou desliga o vídeo local. Roda na thread de mídia. */
+	/**
+	 * Liga ou desliga o vídeo local. Roda na thread de mídia.
+	 * <p>
+	 * A faixa é criada uma vez e reaproveitada: as conexões seguram referência
+	 * a ela mesmo depois de fechadas, e destruí-la antes da fábrica falha.
+	 * Desligar para a captura (a luz da câmera apaga) e desativa a faixa.
+	 */
 	public void setVideo(boolean on) {
 		if (on == videoOn || !ready()) {
 			return;
 		}
 
 		if (on) {
-			if (TEST_PATTERN) {
-				pattern = new TestPatternSource();
-				videoSource = pattern.source();
+			if (videoTrack == null && !createVideoTrack()) {
+				return;
+			}
+			if (pattern != null) {
 				pattern.start();
 			}
-			else {
-				List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
-				if (cameras.isEmpty()) {
-					CraftOffice.LOGGER.warn("Nenhuma câmera encontrada");
-					return;
-				}
-				VideoDevice camera = cameras.getFirst();
-				VideoDeviceSource source = new VideoDeviceSource();
-				source.setVideoCaptureDevice(camera);
-				source.setVideoCaptureCapability(pickCapability(camera));
-				source.start();
-				videoSource = source;
+			else if (videoSource instanceof VideoDeviceSource device) {
+				device.start();
 			}
-
-			videoTrack = factory.createVideoTrack("cam", videoSource);
-			videoTrack.addSink(selfSlot);
+			videoTrack.setEnabled(true);
 			videoOn = true;
 			sessions.values().forEach(PeerSession::attachVideo);
 		}
 		else {
 			videoOn = false;
 			sessions.values().forEach(PeerSession::detachVideo);
-			videoTrack.removeSink(selfSlot);
-			videoTrack.dispose();
-			videoTrack = null;
+			videoTrack.setEnabled(false);
 			if (pattern != null) {
 				pattern.stop();
-				pattern.source().dispose();
-				pattern = null;
 			}
-			if (videoSource instanceof VideoDeviceSource device) {
+			else if (videoSource instanceof VideoDeviceSource device) {
 				device.stop();
-				device.dispose();
 			}
-			videoSource = null;
 		}
+	}
+
+	private boolean createVideoTrack() {
+		if (TEST_PATTERN) {
+			pattern = new TestPatternSource();
+			videoSource = pattern.source();
+		}
+		else {
+			// A primeira câmera com formatos. Câmeras virtuais sem formato (OBS) ficam de fora.
+			VideoDevice camera = MediaDevices.getVideoCaptureDevices().stream()
+					.filter(device -> !MediaDevices.getVideoCaptureCapabilities(device).isEmpty())
+					.findFirst()
+					.orElse(null);
+			if (camera == null) {
+				CraftOffice.LOGGER.warn("Nenhuma câmera utilizável encontrada");
+				return false;
+			}
+			VideoDeviceSource source = new VideoDeviceSource();
+			source.setVideoCaptureDevice(camera);
+			source.setVideoCaptureCapability(pickCapability(camera));
+			videoSource = source;
+		}
+
+		videoTrack = factory.createVideoTrack("cam", videoSource);
+		videoTrack.addSink(selfSlot);
+		return true;
+	}
+
+	/** Fecha conexões, para a captura e libera a parte nativa, para o jogo conseguir sair. */
+	public void shutdown() {
+		closeAll();
+		setVideo(false);
+		if (videoTrack != null) {
+			videoTrack.removeSink(selfSlot);
+			release("faixa de vídeo", videoTrack::dispose);
+		}
+		if (pattern != null) {
+			release("padrão de teste", pattern.source()::dispose);
+		}
+		else if (videoSource instanceof VideoDeviceSource device) {
+			release("câmera", device::dispose);
+		}
+		if (audioTrack != null) {
+			release("faixa de áudio", audioTrack::dispose);
+		}
+		if (audioSource != null) {
+			release("microfone", audioSource::dispose);
+		}
+		if (factory != null) {
+			release("fábrica", factory::dispose);
+		}
+		videoTrack = null;
+		videoSource = null;
+		pattern = null;
+		audioTrack = null;
+		audioSource = null;
+		factory = null;
+	}
+
+	private static void release(String what, Runnable dispose) {
+		try {
+			dispose.run();
+		}
+		catch (Throwable t) {
+			CraftOffice.LOGGER.warn("Falha ao liberar {}: {}", what, t.toString());
+		}
+	}
+
+	/** {@link #shutdown()} esperando no máximo {@code timeoutMs}. Chamado ao fechar o jogo. */
+	public void shutdownAndWait(long timeoutMs) {
+		var done = new java.util.concurrent.CountDownLatch(1);
+		run(() -> {
+			try {
+				shutdown();
+			}
+			finally {
+				done.countDown();
+			}
+		});
+		try {
+			if (!done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+				CraftOffice.LOGGER.warn("A mídia não encerrou em {} ms", timeoutMs);
+			}
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+		executor.shutdown();
 	}
 
 	/** O menor formato que cubra 320x240, com quadros por segundo mais próximos de 20. */
