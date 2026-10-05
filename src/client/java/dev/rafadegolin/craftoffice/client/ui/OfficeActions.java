@@ -3,6 +3,7 @@ package dev.rafadegolin.craftoffice.client.ui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
+import dev.rafadegolin.craftoffice.client.ClientSettings;
 import dev.rafadegolin.craftoffice.client.OfficeSession;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 
@@ -13,7 +14,10 @@ public final class OfficeActions {
 
 	public static void toggleMic() {
 		MediaEngine engine = checkActive();
-		if (engine != null) {
+		if (engine != null && !engine.audioEnabled()) {
+			actionBar("craftoffice.status.audio_disabled");
+		}
+		else if (engine != null) {
 			boolean on = !engine.micOn();
 			engine.run(() -> engine.setMic(on));
 			OfficeSession.sendState(on, engine.videoOn());
@@ -29,6 +33,22 @@ public final class OfficeActions {
 			OfficeSession.sendState(engine.micOn(), on);
 			actionBar(on ? "craftoffice.status.camera_on" : "craftoffice.status.camera_off");
 		}
+	}
+
+	/** Liga ou desliga todo o áudio do mod. Vale para todos os servidores. */
+	public static void toggleAudio() {
+		MediaEngine engine = MediaEngine.get();
+		if (!engine.ready()) {
+			actionBar("craftoffice.status.media_failed");
+			return;
+		}
+		boolean enabled = !engine.audioEnabled();
+		ClientSettings.setAudioEnabled(enabled);
+		engine.run(() -> engine.setAudioEnabled(enabled));
+		if (!enabled) {
+			OfficeSession.sendState(false, engine.videoOn());
+		}
+		actionBar(enabled ? "craftoffice.status.audio_on" : "craftoffice.status.audio_off");
 	}
 
 	public static void toggleScreenShare() {

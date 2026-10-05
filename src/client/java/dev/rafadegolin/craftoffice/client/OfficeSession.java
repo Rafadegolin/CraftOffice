@@ -44,8 +44,8 @@ public final class OfficeSession {
 
 	public static void onConfig(ConfigPayload payload) {
 		config = payload;
-		serverKey = ConsentStore.currentServerKey();
-		consent = ConsentStore.hasConsent(serverKey);
+		serverKey = ClientSettings.currentServerKey();
+		consent = ClientSettings.hasConsent(serverKey);
 		consentScreenPending = !consent;
 
 		MediaEngine engine = MediaEngine.get();
@@ -64,7 +64,7 @@ public final class OfficeSession {
 	public static void setConsent(boolean accepted) {
 		consent = accepted;
 		if (serverKey != null) {
-			ConsentStore.setConsent(serverKey, accepted);
+			ClientSettings.setConsent(serverKey, accepted);
 		}
 		if (!accepted) {
 			neighbors.clear();

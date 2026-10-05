@@ -13,7 +13,7 @@ Mod Fabric de escritório virtual: câmera e microfone por proximidade, salas pr
 ## Estrutura
 
 - `src/main`: comum e servidor. `net/` avisos, `server/OfficeServer` repasse, quem tem o mod e o tick de proximidade, `proximity/ProximityEngine` motor puro sem tipos do Minecraft, `config/ServerConfig` em `config/craftoffice-server.json`.
-- `src/client`: só cliente. `media/` webrtc-java, `render/` texturas e HUD de vídeo, `ui/` teclas, telas e indicadores.
+- `src/client`: só cliente. `ClientSettings` em `config/craftoffice-client.json`, `DistanceVolume` volume pela distância, `media/` webrtc-java e `media/audio/` mixer, `render/` texturas e HUD de vídeo, `ui/` teclas, telas e indicadores.
 - Nada de mídia ou nativo em `src/main`: o servidor dedicado nunca carrega a webrtc-java.
 
 ## Nomes que mudaram no 26.3
@@ -47,7 +47,8 @@ Os modelos ainda escrevem os nomes antigos. Na dúvida, conferir com `javap` nos
 - Não destruir faixas enquanto a fábrica vive: conexões seguram referência mesmo fechadas. A faixa de vídeo é criada uma vez; desligar a câmera para a captura e chama `setEnabled(false)`.
 - Escolher dispositivos explicitamente. Ignorar câmeras sem formato (câmera virtual do OBS).
 - A captura da webcam deixa uma thread nativa não-daemon presa à JVM. Por isso existe a guarda de saída em `CraftOfficeClient.startExitGuard`.
-- Sem volume por faixa na API. O PCM de cada pessoa chega por `AudioTrackSink` na faixa remota.
+- Sem volume por faixa na API, então o áudio é próprio (`media/audio/`): fábrica com `HeadlessAudioDeviceModule`, microfone por `AudioRecorder` + `AudioProcessing` + `CustomAudioSource`, cada vizinho num `PeerAudio` alimentado pelo `AudioTrackSink` da faixa remota, e `AudioMixer` tocando por `AudioPlayer`. O mix também vai para `processReverseStream` como referência do cancelamento de eco.
+- Formato interno: 48 kHz, mono, 16 bits little-endian, blocos de 10 ms (480 amostras).
 - No libyuv, `FourCC.ABGR` é a ordem de bytes R, G, B, A, a mesma da `NativeImage`.
 
 ## Regras do projeto

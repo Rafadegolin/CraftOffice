@@ -21,20 +21,27 @@ import net.minecraft.client.multiplayer.ServerData;
 import dev.rafadegolin.craftoffice.CraftOffice;
 
 /**
- * Servidores em que o player já aceitou a tela de consentimento, em
- * {@code config/craftoffice-client.json}. A tela aparece uma vez por servidor.
+ * Preferências do cliente em {@code config/craftoffice-client.json}:
+ * servidores com consentimento, áudio do mod ligado ou não, e os
+ * dispositivos escolhidos, guardados pelo nome.
  */
-public final class ConsentStore {
+public final class ClientSettings {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 	private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("craftoffice-client.json");
+	/** Id do Simple Voice Chat no Fabric. */
+	private static final String VOICE_CHAT_MOD = "voicechat";
 
 	private static Data data;
 
 	private static final class Data {
 		Set<String> consentedServers = new LinkedHashSet<>();
+		/** Nulo até o player escolher. Aí o padrão depende do Simple Voice Chat. */
+		Boolean audioEnabled;
+		String microphone;
+		String speaker;
 	}
 
-	private ConsentStore() {
+	private ClientSettings() {
 	}
 
 	/** Identifica o servidor atual. Mundos abertos para LAN mudam de porta, então contam pelo endereço sem porta. */
@@ -60,6 +67,38 @@ public final class ConsentStore {
 		}
 	}
 
+	/**
+	 * Áudio do mod ligado. Com o Simple Voice Chat instalado começa desligado,
+	 * para os dois não disputarem o microfone.
+	 */
+	public static synchronized boolean audioEnabled() {
+		Boolean value = load().audioEnabled;
+		return value != null ? value : !FabricLoader.getInstance().isModLoaded(VOICE_CHAT_MOD);
+	}
+
+	public static synchronized void setAudioEnabled(boolean enabled) {
+		load().audioEnabled = enabled;
+		save();
+	}
+
+	public static synchronized String microphone() {
+		return load().microphone;
+	}
+
+	public static synchronized void setMicrophone(String name) {
+		load().microphone = name;
+		save();
+	}
+
+	public static synchronized String speaker() {
+		return load().speaker;
+	}
+
+	public static synchronized void setSpeaker(String name) {
+		load().speaker = name;
+		save();
+	}
+
 	private static Data load() {
 		if (data != null) {
 			return data;
@@ -68,12 +107,15 @@ public final class ConsentStore {
 		if (Files.exists(PATH)) {
 			try (Reader reader = Files.newBufferedReader(PATH, StandardCharsets.UTF_8)) {
 				Data loaded = GSON.fromJson(reader, Data.class);
-				if (loaded != null && loaded.consentedServers != null) {
+				if (loaded != null) {
 					data = loaded;
+					if (data.consentedServers == null) {
+						data.consentedServers = new LinkedHashSet<>();
+					}
 				}
 			}
 			catch (IOException | JsonParseException e) {
-				CraftOffice.LOGGER.warn("craftoffice-client.json inválido, consentimentos zerados", e);
+				CraftOffice.LOGGER.warn("craftoffice-client.json inválido, voltando ao padrão", e);
 			}
 		}
 		return data;

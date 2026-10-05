@@ -24,6 +24,7 @@ import dev.onvoid.webrtc.media.video.VideoTrack;
 import dev.onvoid.webrtc.media.video.VideoTrackSource;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.client.ClientSettings;
 import dev.rafadegolin.craftoffice.client.media.audio.AudioMixer;
 import dev.rafadegolin.craftoffice.client.media.audio.MicCapture;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
@@ -64,6 +65,7 @@ public final class MediaEngine {
 	private AudioDevice speakerDevice;
 	private volatile String micName = "-";
 	private volatile String speakerName = "-";
+	private volatile boolean audioEnabled;
 
 	private VideoTrackSource videoSource;
 	private VideoTrack videoTrack;
@@ -123,14 +125,21 @@ public final class MediaEngine {
 			mic = new MicCapture(processing, audioSource);
 			mixer = new AudioMixer(processing);
 
-			// Sem escolher, a captura abre o primeiro microfone da lista, que pode
-			// ser uma entrada vazia e mandar silêncio. Usa os padrões do Windows.
-			micDevice = MediaDevices.getDefaultAudioCaptureDevice();
+			// O escolhido antes, pelo nome. Se sumiu, o padrão do Windows: sem
+			// escolher, a captura abre o primeiro da lista, que pode ser uma
+			// entrada vazia e mandar silêncio.
+			micDevice = byName(MediaDevices.getAudioCaptureDevices(), ClientSettings.microphone(),
+					MediaDevices.getDefaultAudioCaptureDevice());
 			micName = micDevice != null ? micDevice.getName() : "-";
-			speakerDevice = MediaDevices.getDefaultAudioRenderDevice();
+			speakerDevice = byName(MediaDevices.getAudioRenderDevices(), ClientSettings.speaker(),
+					MediaDevices.getDefaultAudioRenderDevice());
 			speakerName = speakerDevice != null ? speakerDevice.getName() : "-";
-			startPlayer();
-			CraftOffice.LOGGER.info("Microfone: {}. Saída: {}", micName, speakerName);
+			audioEnabled = ClientSettings.audioEnabled();
+			if (audioEnabled) {
+				startPlayer();
+			}
+			CraftOffice.LOGGER.info("Microfone: {}. Saída: {}. Áudio do mod {}", micName, speakerName,
+					audioEnabled ? "ligado" : "desligado");
 
 			loadMillis = (System.nanoTime() - start) / 1_000_000;
 			CraftOffice.LOGGER.info("webrtc-java carregada em {} ms", loadMillis);
@@ -191,14 +200,52 @@ public final class MediaEngine {
 		return mic;
 	}
 
-	private void startPlayer() {
-		if (player != null) {
-			player.stop();
+	private static AudioDevice byName(List<AudioDevice> devices, String name, AudioDevice fallback) {
+		if (name != null) {
+			for (AudioDevice device : devices) {
+				if (device.getName().equals(name)) {
+					return device;
+				}
+			}
 		}
+		return fallback;
+	}
+
+	private void startPlayer() {
+		stopPlayer();
 		player = new AudioPlayer();
 		player.setAudioDevice(speakerDevice);
 		player.setAudioSource(mixer);
 		player.start();
+	}
+
+	private void stopPlayer() {
+		if (player != null) {
+			player.stop();
+			player = null;
+		}
+	}
+
+	public boolean audioEnabled() {
+		return audioEnabled;
+	}
+
+	/**
+	 * Liga ou desliga todo o áudio do mod, para quem usa o Simple Voice Chat.
+	 * Desligado, o microfone não captura e nada toca. Roda na thread de mídia.
+	 */
+	public void setAudioEnabled(boolean enabled) {
+		if (!ready() || enabled == audioEnabled) {
+			return;
+		}
+		audioEnabled = enabled;
+		if (enabled) {
+			startPlayer();
+		}
+		else {
+			setMic(false);
+			stopPlayer();
+		}
 	}
 
 	/** Troca o microfone pelo número da lista de {@code /office devices}. Roda na thread de mídia. */
@@ -209,6 +256,7 @@ public final class MediaEngine {
 		}
 		micDevice = mics.get(index - 1);
 		micName = micDevice.getName();
+		ClientSettings.setMicrophone(micName);
 		if (micOn) {
 			mic.start(micDevice);
 		}
@@ -224,7 +272,10 @@ public final class MediaEngine {
 		}
 		speakerDevice = speakers.get(index - 1);
 		speakerName = speakerDevice.getName();
-		startPlayer();
+		ClientSettings.setSpeaker(speakerName);
+		if (audioEnabled) {
+			startPlayer();
+		}
 		CraftOffice.LOGGER.info("Saída trocada para {}", speakerName);
 		return "Saída: " + speakerName;
 	}
@@ -327,7 +378,7 @@ public final class MediaEngine {
 
 	/** Liga ou desliga o microfone. Desligado, a faixa manda silêncio. Roda na thread de mídia. */
 	public void setMic(boolean on) {
-		if (!ready()) {
+		if (!ready() || on && !audioEnabled) {
 			return;
 		}
 		if (on && !mic.capturing()) {
