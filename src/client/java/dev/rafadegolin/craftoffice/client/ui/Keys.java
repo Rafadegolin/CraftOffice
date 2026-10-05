@@ -16,7 +16,7 @@ public final class Keys {
 	public static final KeyMapping MIC = key("mic", InputConstants.KEY_B);
 	public static final KeyMapping CAMERA = key("camera", InputConstants.KEY_V);
 	public static final KeyMapping SCREEN = key("screen", InputConstants.KEY_J);
-	public static final KeyMapping PANEL = key("panel", InputConstants.KEY_O);
+	public static final KeyMapping PANEL = key("panel", InputConstants.KEY_K);
 	/** Pânico: corta toda a captura. Sem tecla padrão, para ninguém apertar sem querer. */
 	public static final KeyMapping PANIC = key("panic", InputConstants.UNKNOWN.getValue());
 
