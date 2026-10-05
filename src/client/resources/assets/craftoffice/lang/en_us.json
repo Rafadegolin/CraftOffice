@@ -1,4 +1,38 @@
 {
 	"key.category.craftoffice.main": "CraftOffice",
-	"key.craftoffice.camera": "Toggle camera"
+	"key.craftoffice.mic": "Toggle microphone",
+	"key.craftoffice.camera": "Toggle camera",
+	"key.craftoffice.screen": "Share screen",
+	"key.craftoffice.panel": "CraftOffice panel",
+	"key.craftoffice.panic": "Stop all capture",
+
+	"craftoffice.consent.title": "CraftOffice on this server",
+	"craftoffice.consent.body": "This server uses CraftOffice: proximity camera and microphone, like an office.\n\n• Camera and microphone start off every time you join. Turn them on with %1$s (camera) and %2$s (microphone).\n• Audio and video go straight to the players near you, never through the game server. They can see your IP address.\n• To find a path to the others, the game asks: %3$s.\n• Nothing is recorded.\n• %4$s stops all capture at once. Set this key in Controls.",
+	"craftoffice.consent.no_ice": "no external server",
+	"craftoffice.consent.accept": "Accept",
+	"craftoffice.consent.decline": "Not now",
+
+	"craftoffice.panel.title": "CraftOffice",
+	"craftoffice.panel.status": "Connected to %s person(s)",
+	"craftoffice.panel.mic_on": "Microphone: on",
+	"craftoffice.panel.mic_off": "Microphone: off",
+	"craftoffice.panel.camera_on": "Camera: on",
+	"craftoffice.panel.camera_off": "Camera: off",
+	"craftoffice.panel.consent": "Read and accept consent",
+	"craftoffice.panel.revoke": "Withdraw consent",
+	"craftoffice.panel.panic": "Stop all",
+
+	"craftoffice.hud.mic": "MIC",
+	"craftoffice.hud.camera": "CAM",
+	"craftoffice.hud.screen": "SCREEN",
+	"craftoffice.hud.off": "CraftOffice off. %s opens the panel",
+
+	"craftoffice.status.mic_on": "Microphone on",
+	"craftoffice.status.mic_off": "Microphone off",
+	"craftoffice.status.camera_on": "Camera on",
+	"craftoffice.status.camera_off": "Camera off",
+	"craftoffice.status.screen_soon": "Screen sharing comes in a later version",
+	"craftoffice.status.no_server_mod": "This server does not have CraftOffice",
+	"craftoffice.status.no_consent": "Accept consent in the CraftOffice panel",
+	"craftoffice.status.media_failed": "CraftOffice media failed to load. Check the log"
 }

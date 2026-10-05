@@ -22,6 +22,7 @@ import dev.onvoid.webrtc.media.video.VideoTrack;
 import dev.onvoid.webrtc.media.video.VideoTrackSource;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.net.ConfigPayload;
 
 /**
  * Dono de toda a mídia do cliente. Todas as chamadas à webrtc-java passam pela
@@ -53,6 +54,10 @@ public final class MediaEngine {
 	private TestPatternSource pattern;
 	private final FrameSlot selfSlot = new FrameSlot();
 	private volatile boolean videoOn;
+	private volatile boolean micOn;
+
+	/** STUN e TURN vindos do {@code config} do servidor. */
+	private volatile List<ConfigPayload.IceServer> iceServers = List.of();
 
 	private final Map<UUID, PeerSession> sessions = new ConcurrentHashMap<>();
 
@@ -104,6 +109,8 @@ public final class MediaEngine {
 			options.highpassFilter = true;
 			audioSource = factory.createAudioSource(options);
 			audioTrack = factory.createAudioTrack("mic", audioSource);
+			// Microfone começa desligado, como a câmera.
+			audioTrack.setEnabled(false);
 
 			loadMillis = (System.nanoTime() - start) / 1_000_000;
 			CraftOffice.LOGGER.info("webrtc-java carregada em {} ms", loadMillis);
@@ -197,7 +204,7 @@ public final class MediaEngine {
 		}
 
 		if (on) {
-			if (videoTrack == null && !createVideoTrack()) {
+			if (!ensureVideoTrack()) {
 				return;
 			}
 			if (pattern != null) {
@@ -245,8 +252,46 @@ public final class MediaEngine {
 		}
 
 		videoTrack = factory.createVideoTrack("cam", videoSource);
+		videoTrack.setEnabled(false);
 		videoTrack.addSink(selfSlot);
 		return true;
+	}
+
+	/**
+	 * Cria a faixa de vídeo sem ligar a câmera, para ela entrar em toda oferta.
+	 * Ligar a câmera depois não exige renegociar. Roda na thread de mídia.
+	 */
+	boolean ensureVideoTrack() {
+		return videoTrack != null || createVideoTrack();
+	}
+
+	public boolean micOn() {
+		return micOn;
+	}
+
+	/** Liga ou desliga o microfone. Desligado, a faixa manda silêncio. Roda na thread de mídia. */
+	public void setMic(boolean on) {
+		if (!ready()) {
+			return;
+		}
+		audioTrack.setEnabled(on);
+		micOn = on;
+	}
+
+	List<ConfigPayload.IceServer> iceServers() {
+		return iceServers;
+	}
+
+	public void setIceServers(List<ConfigPayload.IceServer> servers) {
+		iceServers = List.copyOf(servers);
+	}
+
+	/** Ao sair de um servidor: fecha as conexões e desliga câmera e microfone. Roda na thread de mídia. */
+	public void reset() {
+		closeAll();
+		setVideo(false);
+		setMic(false);
+		iceServers = List.of();
 	}
 
 	/** Fecha conexões, para a captura e libera a parte nativa, para o jogo conseguir sair. */
@@ -340,6 +385,7 @@ public final class MediaEngine {
 
 	/** Abre ou reaproveita a sessão com um player. Roda na thread de mídia. */
 	public PeerSession session(UUID peer, boolean initiator) {
+		ensureVideoTrack();
 		return sessions.computeIfAbsent(peer, id -> new PeerSession(this, id, initiator));
 	}
 

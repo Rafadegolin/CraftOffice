@@ -1,4 +1,38 @@
 {
 	"key.category.craftoffice.main": "CraftOffice",
-	"key.craftoffice.camera": "Ligar/desligar câmera"
+	"key.craftoffice.mic": "Ligar/desligar microfone",
+	"key.craftoffice.camera": "Ligar/desligar câmera",
+	"key.craftoffice.screen": "Compartilhar tela",
+	"key.craftoffice.panel": "Painel do CraftOffice",
+	"key.craftoffice.panic": "Cortar toda a captura",
+
+	"craftoffice.consent.title": "CraftOffice neste servidor",
+	"craftoffice.consent.body": "Este servidor usa o CraftOffice: câmera e microfone por proximidade, como num escritório.\n\n• Câmera e microfone começam desligados em toda entrada. Você liga com %1$s (câmera) e %2$s (microfone).\n• Áudio e vídeo vão direto para os players perto de você, sem passar pelo servidor do jogo. Eles podem ver o seu endereço IP.\n• Para achar o caminho até os outros, o jogo consulta: %3$s.\n• Nada é gravado.\n• %4$s corta toda a captura na hora. Defina essa tecla em Controles.",
+	"craftoffice.consent.no_ice": "nenhum servidor externo",
+	"craftoffice.consent.accept": "Aceitar",
+	"craftoffice.consent.decline": "Agora não",
+
+	"craftoffice.panel.title": "CraftOffice",
+	"craftoffice.panel.status": "Conectado a %s pessoa(s)",
+	"craftoffice.panel.mic_on": "Microfone: ligado",
+	"craftoffice.panel.mic_off": "Microfone: desligado",
+	"craftoffice.panel.camera_on": "Câmera: ligada",
+	"craftoffice.panel.camera_off": "Câmera: desligada",
+	"craftoffice.panel.consent": "Ler e aceitar o consentimento",
+	"craftoffice.panel.revoke": "Retirar consentimento",
+	"craftoffice.panel.panic": "Cortar tudo",
+
+	"craftoffice.hud.mic": "MIC",
+	"craftoffice.hud.camera": "CAM",
+	"craftoffice.hud.screen": "TELA",
+	"craftoffice.hud.off": "CraftOffice desligado. %s abre o painel",
+
+	"craftoffice.status.mic_on": "Microfone ligado",
+	"craftoffice.status.mic_off": "Microfone desligado",
+	"craftoffice.status.camera_on": "Câmera ligada",
+	"craftoffice.status.camera_off": "Câmera desligada",
+	"craftoffice.status.screen_soon": "Compartilhar tela chega numa próxima versão",
+	"craftoffice.status.no_server_mod": "Este servidor não tem o CraftOffice",
+	"craftoffice.status.no_consent": "Aceite o consentimento no painel do CraftOffice",
+	"craftoffice.status.media_failed": "A parte de mídia do CraftOffice não carregou. Veja o log"
 }

@@ -35,6 +35,7 @@ import dev.onvoid.webrtc.media.audio.AudioTrackSink;
 import dev.onvoid.webrtc.media.video.VideoTrack;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
+import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 
 /**
@@ -43,7 +44,6 @@ import dev.rafadegolin.craftoffice.net.SignalPayload;
  * Todos os métodos rodam na thread de mídia.
  */
 public final class PeerSession implements PeerConnectionObserver {
-	private static final String STUN = "stun:stun.l.google.com:19302";
 
 	private final MediaEngine engine;
 	private final UUID peer;
@@ -68,10 +68,16 @@ public final class PeerSession implements PeerConnectionObserver {
 		this.peer = peer;
 		this.initiator = initiator;
 
-		RTCIceServer stun = new RTCIceServer();
-		stun.urls.add(STUN);
 		RTCConfiguration config = new RTCConfiguration();
-		config.iceServers.add(stun);
+		for (ConfigPayload.IceServer server : engine.iceServers()) {
+			RTCIceServer ice = new RTCIceServer();
+			ice.urls.add(server.url());
+			if (!server.username().isEmpty()) {
+				ice.username = server.username();
+				ice.password = server.credential();
+			}
+			config.iceServers.add(ice);
+		}
 		connection = engine.factory().createPeerConnection(config, this);
 
 		// Quem atende só anexa as faixas depois de ler a oferta: transceptores
@@ -100,6 +106,9 @@ public final class PeerSession implements PeerConnectionObserver {
 			RTCRtpTransceiver transceiver = connection.addTransceiver(video, videoInit);
 			preferVp8(transceiver);
 			videoSender = transceiver.getSender();
+			if (!engine.videoOn()) {
+				detachVideo();
+			}
 		}
 	}
 
@@ -109,6 +118,9 @@ public final class PeerSession implements PeerConnectionObserver {
 		VideoTrack video = engine.videoTrack();
 		if (video != null) {
 			videoSender = connection.addTrack(video, List.of("craftoffice"));
+			if (!engine.videoOn()) {
+				detachVideo();
+			}
 		}
 	}
 

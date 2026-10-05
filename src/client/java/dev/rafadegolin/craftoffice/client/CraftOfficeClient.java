@@ -3,7 +3,6 @@ package dev.rafadegolin.craftoffice.client;
 import java.util.List;
 import java.util.UUID;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -14,12 +13,10 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 
-import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
@@ -28,13 +25,15 @@ import dev.rafadegolin.craftoffice.CraftOffice;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
 import dev.rafadegolin.craftoffice.client.media.PeerSession;
 import dev.rafadegolin.craftoffice.client.render.VideoHud;
+import dev.rafadegolin.craftoffice.client.ui.Keys;
+import dev.rafadegolin.craftoffice.client.ui.OfficeActions;
+import dev.rafadegolin.craftoffice.client.ui.StatusHud;
+import dev.rafadegolin.craftoffice.net.ConfigPayload;
+import dev.rafadegolin.craftoffice.net.HelloPayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 
 public class CraftOfficeClient implements ClientModInitializer {
-	private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(CraftOffice.id("main"));
-
 	private final VideoHud hud = new VideoHud();
-	private KeyMapping toggleCamera;
 	private int statsTicks;
 
 	@Override
@@ -42,16 +41,12 @@ public class CraftOfficeClient implements ClientModInitializer {
 		// Carrega a parte nativa já na abertura, fora da thread do jogo.
 		MediaEngine.get();
 
-		toggleCamera = KeyMappingHelper.registerKeyMapping(
-				new KeyMapping("key.craftoffice.camera", InputConstants.KEY_V, CATEGORY));
+		Keys.register();
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
-			while (toggleCamera.consumeClick()) {
-				MediaEngine engine = MediaEngine.get();
-				engine.run(() -> engine.setVideo(!engine.videoOn()));
-			}
+			OfficeSession.tick(client);
 
-			// Fase 0: com conexão aberta, grava os números no log a cada 5 segundos.
+			// Com conexão aberta, grava os números no log a cada 5 segundos.
 			MediaEngine engine = MediaEngine.getIfLoaded();
 			if (++statsTicks >= 100 && engine != null && !engine.sessions().isEmpty()) {
 				statsTicks = 0;
@@ -59,9 +54,30 @@ public class CraftOfficeClient implements ClientModInitializer {
 			}
 		});
 
+		HudElementRegistry.addLast(CraftOffice.id("status"), StatusHud::extract);
 		HudElementRegistry.addLast(CraftOffice.id("video"), hud::extract);
 
+		// Servidor sem o mod não registra o hello: o mod fica quieto e nada quebra.
+		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+			OfficeSession.reset();
+			if (ClientPlayNetworking.canSend(HelloPayload.TYPE)) {
+				ClientPlayNetworking.send(new HelloPayload(CraftOffice.PROTOCOL));
+			}
+		});
+
+		ClientPlayNetworking.registerGlobalReceiver(ConfigPayload.TYPE, (payload, context) -> {
+			if (payload.protocol() != CraftOffice.PROTOCOL) {
+				CraftOffice.LOGGER.warn("Servidor usa o protocolo {} e o cliente o {}", payload.protocol(), CraftOffice.PROTOCOL);
+				return;
+			}
+			OfficeSession.onConfig(payload);
+		});
+
 		ClientPlayNetworking.registerGlobalReceiver(SignalPayload.TYPE, (payload, context) -> {
+			// Sem consentimento, ninguém abre conexão com este player.
+			if (!OfficeSession.active()) {
+				return;
+			}
 			MediaEngine engine = MediaEngine.get();
 			engine.run(() -> {
 				if (!engine.ready()) {
@@ -72,10 +88,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 					return;
 				}
 				PeerSession session = engine.sessions().get(payload.peer());
-				// Quem recebe a oferta abre a própria sessão sem iniciar, com vídeo
-				// ligado para responder com a própria faixa.
 				if (session == null && payload.kind().equals("offer")) {
-					engine.setVideo(true);
 					session = engine.session(payload.peer(), false);
 				}
 				if (session != null) {
@@ -87,12 +100,12 @@ public class CraftOfficeClient implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			MediaEngine engine = MediaEngine.getIfLoaded();
 			if (engine != null) {
-				engine.run(() -> {
-					engine.closeAll();
-					engine.setVideo(false);
-				});
+				engine.run(engine::reset);
 			}
-			client.execute(hud::clear);
+			client.execute(() -> {
+				OfficeSession.reset();
+				hud.clear();
+			});
 		});
 
 		// Sem isso a thread nativa da WebRTC segura o processo e o jogo não fecha.
@@ -108,8 +121,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 				ClientCommands.literal("office")
 						.then(ClientCommands.literal("devices").executes(this::devices))
 						.then(ClientCommands.literal("cam").executes(ctx -> {
-							MediaEngine engine = MediaEngine.get();
-							engine.run(() -> engine.setVideo(!engine.videoOn()));
+							OfficeActions.toggleCamera();
 							return 1;
 						}))
 						.then(ClientCommands.literal("call")
@@ -147,8 +159,12 @@ public class CraftOfficeClient implements ClientModInitializer {
 			ctx.getSource().sendError(Component.literal("Player não encontrado: " + name));
 			return 0;
 		}
-		if (!ClientPlayNetworking.canSend(SignalPayload.TYPE)) {
-			ctx.getSource().sendError(Component.literal("O servidor não tem o CraftOffice"));
+		if (!OfficeSession.serverHasMod()) {
+			ctx.getSource().sendError(Component.translatable("craftoffice.status.no_server_mod"));
+			return 0;
+		}
+		if (!OfficeSession.hasConsent()) {
+			ctx.getSource().sendError(Component.translatable("craftoffice.status.no_consent"));
 			return 0;
 		}
 
@@ -163,8 +179,6 @@ public class CraftOfficeClient implements ClientModInitializer {
 				feedback(List.of("webrtc-java não carregou: " + engine.loadError()));
 				return;
 			}
-			// O vídeo precisa estar ligado antes de negociar, para entrar na oferta.
-			engine.setVideo(true);
 			engine.closeSession(peer);
 			engine.session(peer, true);
 			feedback(List.of("Chamando " + info.getProfile().name()));
