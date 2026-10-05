@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "craftoffice",
+	"version": "${version}",
+	"name": "CraftOffice",
+	"description": "Escritório virtual por proximidade: chegou perto, a câmera abre.",
+	"authors": [
+		"Rafadegolin"
+	],
+	"contact": {
+		"sources": "https://github.com/Rafadegolin/CraftOffice"
+	},
+	"license": "MIT",
+	"icon": "assets/craftoffice/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.rafadegolin.craftoffice.CraftOffice"
+		],
+		"client": [
+			"dev.rafadegolin.craftoffice.client.CraftOfficeClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
