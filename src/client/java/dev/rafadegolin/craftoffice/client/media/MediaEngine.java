@@ -383,10 +383,10 @@ public final class MediaEngine {
 		return sessions;
 	}
 
-	/** Abre ou reaproveita a sessão com um player. Roda na thread de mídia. */
-	public PeerSession session(UUID peer, boolean initiator) {
+	/** Abre ou reaproveita a sessão com um vizinho. {@code videoAllowed} vem do limite de vídeos do servidor. Roda na thread de mídia. */
+	public PeerSession session(UUID peer, boolean initiator, boolean videoAllowed) {
 		ensureVideoTrack();
-		return sessions.computeIfAbsent(peer, id -> new PeerSession(this, id, initiator));
+		return sessions.computeIfAbsent(peer, id -> new PeerSession(this, id, initiator, videoAllowed));
 	}
 
 	public void closeSession(UUID peer) {

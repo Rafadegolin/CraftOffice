@@ -7,11 +7,12 @@ Mod Fabric de escritório virtual: câmera e microfone por proximidade, salas pr
 - Minecraft Java 26.3, Fabric Loader 0.19.5, Fabric API 0.161.0+26.3, Loom 1.18, Java 25.
 - O JDK 25 pode não estar no PATH. No Windows: `JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`.
 - `./gradlew build` compila. `./gradlew runClient` abre o Player1 e `./gradlew runClient2` o Player2, com padrão de teste no lugar da webcam (a câmera só abre em um processo).
-- Teste de dois clientes: Player1 abre o mundo para LAN, Player2 entra pela lista, Player1 roda `/office call Player2`. Com conexão aberta, os números vão para o log a cada 5 s (`[auto]`).
+- Teste de dois clientes: Player1 abre o mundo para LAN, Player2 entra pela lista, os dois aceitam o consentimento e chegam a 6 blocos um do outro. `/office debug` lista os vizinhos. Com conexão aberta, os números vão para o log a cada 5 s (`[auto]`).
+- `./gradlew test` roda os testes do motor de proximidade (`src/test`).
 
 ## Estrutura
 
-- `src/main`: comum e servidor. `net/` avisos, `server/OfficeServer` repasse e quem tem o mod, `config/ServerConfig` em `config/craftoffice-server.json`.
+- `src/main`: comum e servidor. `net/` avisos, `server/OfficeServer` repasse, quem tem o mod e o tick de proximidade, `proximity/ProximityEngine` motor puro sem tipos do Minecraft, `config/ServerConfig` em `config/craftoffice-server.json`.
 - `src/client`: só cliente. `media/` webrtc-java, `render/` texturas e HUD de vídeo, `ui/` teclas, telas e indicadores.
 - Nada de mídia ou nativo em `src/main`: o servidor dedicado nunca carrega a webrtc-java.
 

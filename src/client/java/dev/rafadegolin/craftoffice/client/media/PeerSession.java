@@ -50,6 +50,8 @@ public final class PeerSession implements PeerConnectionObserver {
 	private final boolean initiator;
 	private final RTCPeerConnection connection;
 	private RTCRtpSender videoSender;
+	/** O servidor limita quantos vizinhos trocam vídeo. Fora do limite, só áudio. */
+	private volatile boolean videoAllowed;
 
 	private final List<RTCIceCandidate> pendingCandidates = new ArrayList<>();
 	private boolean remoteDescriptionSet;
@@ -63,10 +65,11 @@ public final class PeerSession implements PeerConnectionObserver {
 	private volatile String remoteAudioFormat = "-";
 	private volatile int remoteAudioPeak;
 
-	PeerSession(MediaEngine engine, UUID peer, boolean initiator) {
+	PeerSession(MediaEngine engine, UUID peer, boolean initiator, boolean videoAllowed) {
 		this.engine = engine;
 		this.peer = peer;
 		this.initiator = initiator;
+		this.videoAllowed = videoAllowed;
 
 		RTCConfiguration config = new RTCConfiguration();
 		for (ConfigPayload.IceServer server : engine.iceServers()) {
@@ -106,7 +109,7 @@ public final class PeerSession implements PeerConnectionObserver {
 			RTCRtpTransceiver transceiver = connection.addTransceiver(video, videoInit);
 			preferVp8(transceiver);
 			videoSender = transceiver.getSender();
-			if (!engine.videoOn()) {
+			if (!sendingVideo()) {
 				detachVideo();
 			}
 		}
@@ -118,7 +121,7 @@ public final class PeerSession implements PeerConnectionObserver {
 		VideoTrack video = engine.videoTrack();
 		if (video != null) {
 			videoSender = connection.addTrack(video, List.of("craftoffice"));
-			if (!engine.videoOn()) {
+			if (!sendingVideo()) {
 				detachVideo();
 			}
 		}
@@ -225,12 +228,25 @@ public final class PeerSession implements PeerConnectionObserver {
 		});
 	}
 
+	private boolean sendingVideo() {
+		return engine.videoOn() && videoAllowed;
+	}
+
+	/** Câmera ligada: manda vídeo se o servidor permitir para este vizinho. */
 	void attachVideo() {
-		if (videoSender != null) {
+		if (videoSender != null && videoAllowed) {
 			videoSender.replaceTrack(engine.videoTrack());
 		}
+	}
+
+	/** O servidor mudou o limite de vídeos. Roda na thread de mídia. */
+	public void setVideoAllowed(boolean allowed) {
+		videoAllowed = allowed;
+		if (sendingVideo()) {
+			attachVideo();
+		}
 		else {
-			CraftOffice.LOGGER.info("Sessão sem faixa de vídeo. Desligue e chame de novo para mandar vídeo");
+			detachVideo();
 		}
 	}
 

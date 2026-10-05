@@ -16,6 +16,7 @@ public final class OfficeActions {
 		if (engine != null) {
 			boolean on = !engine.micOn();
 			engine.run(() -> engine.setMic(on));
+			OfficeSession.sendState(on, engine.videoOn());
 			actionBar(on ? "craftoffice.status.mic_on" : "craftoffice.status.mic_off");
 		}
 	}
@@ -25,6 +26,7 @@ public final class OfficeActions {
 		if (engine != null) {
 			boolean on = !engine.videoOn();
 			engine.run(() -> engine.setVideo(on));
+			OfficeSession.sendState(engine.micOn(), on);
 			actionBar(on ? "craftoffice.status.camera_on" : "craftoffice.status.camera_off");
 		}
 	}
@@ -35,15 +37,15 @@ public final class OfficeActions {
 		}
 	}
 
-	/** Tecla de pânico do estudo: corta câmera, microfone e todas as conexões. */
+	/** Tecla de pânico do estudo: corta câmera e microfone na hora. */
 	public static void stopAll() {
 		MediaEngine engine = MediaEngine.getIfLoaded();
 		if (engine != null) {
 			engine.run(() -> {
-				engine.closeAll();
 				engine.setVideo(false);
 				engine.setMic(false);
 			});
+			OfficeSession.sendState(false, false);
 		}
 	}
 

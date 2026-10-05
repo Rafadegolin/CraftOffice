@@ -54,6 +54,14 @@ dependencies {
 		clientRuntimeOnly("dev.onvoid.webrtc:webrtc-java:${project.webrtc_version}:${platform}") { transitive = false }
 		include("dev.onvoid.webrtc:webrtc-java:${project.webrtc_version}:${platform}") { transitive = false }
 	}
+
+	testImplementation platform("org.junit:junit-bom:6.1.3")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
 }
 
 processResources {

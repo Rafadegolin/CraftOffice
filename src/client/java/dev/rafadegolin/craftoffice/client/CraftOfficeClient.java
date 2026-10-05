@@ -1,10 +1,11 @@
 package dev.rafadegolin.craftoffice.client;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -20,6 +21,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Player;
 
 import dev.rafadegolin.craftoffice.CraftOffice;
 import dev.rafadegolin.craftoffice.client.media.MediaEngine;
@@ -30,6 +32,7 @@ import dev.rafadegolin.craftoffice.client.ui.OfficeActions;
 import dev.rafadegolin.craftoffice.client.ui.StatusHud;
 import dev.rafadegolin.craftoffice.net.ConfigPayload;
 import dev.rafadegolin.craftoffice.net.HelloPayload;
+import dev.rafadegolin.craftoffice.net.PeerPayload;
 import dev.rafadegolin.craftoffice.net.SignalPayload;
 
 public class CraftOfficeClient implements ClientModInitializer {
@@ -73,11 +76,14 @@ public class CraftOfficeClient implements ClientModInitializer {
 			OfficeSession.onConfig(payload);
 		});
 
+		ClientPlayNetworking.registerGlobalReceiver(PeerPayload.TYPE, (payload, context) -> OfficeSession.onPeer(payload));
+
 		ClientPlayNetworking.registerGlobalReceiver(SignalPayload.TYPE, (payload, context) -> {
-			// Sem consentimento, ninguém abre conexão com este player.
-			if (!OfficeSession.active()) {
+			// Só negocia com quem o servidor disse que é vizinho, e com consentimento.
+			if (!OfficeSession.active() || !OfficeSession.isNeighbor(payload.peer()) && !payload.kind().equals("bye")) {
 				return;
 			}
+			boolean videoAllowed = OfficeSession.videoAllowed(payload.peer());
 			MediaEngine engine = MediaEngine.get();
 			engine.run(() -> {
 				if (!engine.ready()) {
@@ -89,7 +95,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 				}
 				PeerSession session = engine.sessions().get(payload.peer());
 				if (session == null && payload.kind().equals("offer")) {
-					session = engine.session(payload.peer(), false);
+					session = engine.session(payload.peer(), false, videoAllowed);
 				}
 				if (session != null) {
 					session.onSignal(payload.kind(), payload.data());
@@ -124,13 +130,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 							OfficeActions.toggleCamera();
 							return 1;
 						}))
-						.then(ClientCommands.literal("call")
-								.then(ClientCommands.argument("player", StringArgumentType.word()).executes(this::call)))
-						.then(ClientCommands.literal("hangup").executes(ctx -> {
-							MediaEngine engine = MediaEngine.get();
-							engine.run(engine::closeAll);
-							return 1;
-						}))
+						.then(ClientCommands.literal("debug").executes(this::debug))
 						.then(ClientCommands.literal("mic")
 								.then(ClientCommands.argument("number", IntegerArgumentType.integer(1)).executes(ctx -> {
 									int index = IntegerArgumentType.getInteger(ctx, "number");
@@ -152,37 +152,33 @@ public class CraftOfficeClient implements ClientModInitializer {
 		return 1;
 	}
 
-	private int call(CommandContext<FabricClientCommandSource> ctx) {
-		String name = StringArgumentType.getString(ctx, "player");
-		PlayerInfo info = Minecraft.getInstance().getConnection().getPlayerInfoIgnoreCase(name);
-		if (info == null) {
-			ctx.getSource().sendError(Component.literal("Player não encontrado: " + name));
-			return 0;
-		}
-		if (!OfficeSession.serverHasMod()) {
-			ctx.getSource().sendError(Component.translatable("craftoffice.status.no_server_mod"));
-			return 0;
-		}
-		if (!OfficeSession.hasConsent()) {
-			ctx.getSource().sendError(Component.translatable("craftoffice.status.no_consent"));
+	/** Vizinhos segundo o servidor, com distância, vídeo e estado da conexão. */
+	private int debug(CommandContext<FabricClientCommandSource> ctx) {
+		Minecraft mc = Minecraft.getInstance();
+		if (!OfficeSession.active()) {
+			ctx.getSource().sendError(Component.translatable(OfficeSession.serverHasMod()
+					? "craftoffice.status.no_consent" : "craftoffice.status.no_server_mod"));
 			return 0;
 		}
 
-		UUID peer = info.getProfile().id();
-		if (peer.equals(ctx.getSource().getPlayer().getUUID())) {
-			ctx.getSource().sendError(Component.literal("Não dá para chamar você mesmo"));
-			return 0;
+		Map<UUID, Boolean> neighbors = OfficeSession.neighbors();
+		var config = OfficeSession.config();
+		List<String> lines = new ArrayList<>();
+		lines.add(String.format("Raios %.0f/%.0f, até %d vídeos. %d vizinho(s):",
+				config.connectRadius(), config.disconnectRadius(), config.maxVideos(), neighbors.size()));
+
+		MediaEngine engine = MediaEngine.getIfLoaded();
+		for (Map.Entry<UUID, Boolean> entry : neighbors.entrySet()) {
+			UUID id = entry.getKey();
+			PlayerInfo info = mc.getConnection().getPlayerInfo(id);
+			String name = info != null ? info.getProfile().name() : id.toString().substring(0, 8);
+			Player other = mc.level.getPlayerByUUID(id);
+			String distance = other != null ? String.format("%.1f blocos", other.distanceTo(mc.player)) : "longe";
+			PeerSession session = engine != null ? engine.sessions().get(id) : null;
+			lines.add(String.format("  %s: %s, %s, %s", name, distance, entry.getValue() ? "vídeo" : "só áudio",
+					session != null ? session.state() : "sem conexão"));
 		}
-		MediaEngine engine = MediaEngine.get();
-		engine.run(() -> {
-			if (!engine.ready()) {
-				feedback(List.of("webrtc-java não carregou: " + engine.loadError()));
-				return;
-			}
-			engine.closeSession(peer);
-			engine.session(peer, true);
-			feedback(List.of("Chamando " + info.getProfile().name()));
-		});
+		feedback(lines);
 		return 1;
 	}
 
@@ -197,7 +193,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 	}
 
 	private static List<String> statsLines(MediaEngine engine) {
-		List<String> lines = new java.util.ArrayList<>();
+		List<String> lines = new ArrayList<>();
 		lines.add("webrtc-java: " + (engine.ready() ? "carregada em " + engine.loadMillis() + " ms" : "falhou: " + engine.loadError()));
 		lines.add(String.format("Câmera: %s, %.1f fps, origem %s, jogo %d fps", engine.videoOn() ? "ligada" : "desligada",
 				engine.selfSlot().fps(), engine.selfSlot().sourceSize(), Minecraft.getInstance().getFps()));
