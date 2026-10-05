@@ -164,8 +164,8 @@ class ProximityEngineTest {
 			long videos = changes.stream().filter(change -> change.player().equals(player) && change.video()).count();
 			assertTrue(videos <= 2, "ninguém recebe mais vídeos que o limite");
 		}
-		assertTrue(changes.contains(new Change(Action.ADD, a, b, true, true)), "o mais próximo manda vídeo");
-		assertTrue(changes.contains(new Change(Action.ADD, a, d, true, false)), "o mais longe fica só com áudio");
+		assertTrue(changes.contains(new Change(Action.ADD, a, b, true, true, false)), "o mais próximo manda vídeo");
+		assertTrue(changes.contains(new Change(Action.ADD, a, d, true, false, false)), "o mais longe fica só com áudio");
 		assertEquals(Set.of(b, c, d), engine.neighbors(a), "todos continuam conectados por áudio");
 	}
 
@@ -175,7 +175,67 @@ class ProximityEngineTest {
 		run(0, at(a, 0), at(b, 2), at(c, 4));
 
 		List<Change> changes = run(0, at(a, 0), at(b, 4), at(c, 1));
-		assertTrue(changes.contains(new Change(Action.UPDATE, a, c, true, true)), "C passa a mandar vídeo para A");
-		assertTrue(changes.contains(new Change(Action.UPDATE, a, b, true, false)), "B passa a só áudio");
+		assertTrue(changes.contains(new Change(Action.UPDATE, a, c, true, true, false)), "C passa a mandar vídeo para A");
+		assertTrue(changes.contains(new Change(Action.UPDATE, a, b, true, false, false)), "B passa a só áudio");
+	}
+
+	private static Position inZone(UUID id, double x, String zone) {
+		return new Position(id, OVERWORLD, x, 64, 0, zone, false, 1);
+	}
+
+	@Test
+	void sameZoneConnectsRegardlessOfDistanceWithFullVolume() {
+		List<Change> changes = run(1000, inZone(a, 0, "sala"), inZone(b, 30, "sala"));
+		assertTrue(changes.contains(new Change(Action.ADD, a, b, true, true, true)), "30 blocos na mesma sala conecta");
+		assertTrue(engine.areNeighbors(a, b));
+	}
+
+	@Test
+	void differentZonesNeverConnectEvenSideBySide() {
+		List<Change> changes = run(2000, inZone(a, 0, "sala1"), inZone(b, 1, "sala2"));
+		assertEquals(0, count(changes, Action.ADD), "parede entre salas: não conecta");
+	}
+
+	@Test
+	void insideAndOutsideZoneNeverConnect() {
+		List<Change> changes = run(2000, inZone(a, 0, "sala"), at(b, 1));
+		assertEquals(0, count(changes, Action.ADD));
+	}
+
+	@Test
+	void leavingZoneDisconnectsImmediately() {
+		run(1000, inZone(a, 0, "sala"), inZone(b, 3, "sala"));
+		List<Change> changes = engine.update(List.of(inZone(a, 0, "sala"), at(b, 3)), now);
+		assertEquals(2, count(changes, Action.REMOVE), "sair da sala corta na hora, sem esperar 1 segundo");
+	}
+
+	@Test
+	void stageReachesFarAudienceOutsideZones() {
+		Position speaker = new Position(a, OVERWORLD, 0, 64, 0, null, true, 1);
+		List<Change> changes = run(1000, speaker, at(b, 30), at(c, 60));
+		assertTrue(changes.contains(new Change(Action.ADD, a, b, true, true, true)), "30 blocos ouvem o palco com volume cheio");
+		assertFalse(engine.areNeighbors(a, c), "60 blocos passa do alcance do palco");
+		assertFalse(engine.areNeighbors(b, c), "a plateia não conversa entre si à distância");
+	}
+
+	@Test
+	void steppingOffStageFallsBackToProximity() {
+		Position speaker = new Position(a, OVERWORLD, 0, 64, 0, null, true, 1);
+		run(1000, speaker, at(b, 5));
+		List<Change> changes = run(0, at(a, 0), at(b, 5));
+		assertTrue(changes.contains(new Change(Action.UPDATE, a, b, true, true, false)), "perto continua, mas volta a cair com a distância");
+
+		changes = run(1500, at(a, 0), at(b, 30));
+		assertEquals(2, count(changes, Action.REMOVE), "longe, desconecta depois do atraso");
+	}
+
+	@Test
+	void focusShrinksRadius() {
+		Position focused = new Position(a, OVERWORLD, 0, 64, 0, null, false, 2.0 / 6);
+		List<Change> changes = run(2000, focused, at(b, 4));
+		assertEquals(0, count(changes, Action.ADD), "em foco, 4 blocos é longe");
+
+		changes = run(1000, focused, at(b, 1.5));
+		assertEquals(2, count(changes, Action.ADD), "em foco, 1,5 bloco conecta");
 	}
 }

@@ -133,7 +133,7 @@ public final class OfficeServer {
 			ServerPlayer target = server.getPlayerList().getPlayer(change.player());
 			if (target != null && enabled(target)) {
 				PeerPayload.Action action = PeerPayload.Action.valueOf(change.action().name());
-				ServerPlayNetworking.send(target, new PeerPayload(action, change.peer(), change.initiator(), change.video()));
+				ServerPlayNetworking.send(target, new PeerPayload(action, change.peer(), change.initiator(), change.video(), change.fullVolume()));
 				if (action == PeerPayload.Action.ADD) {
 					ServerPlayNetworking.send(target, peerState(change.peer()));
 				}

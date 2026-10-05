@@ -12,9 +12,10 @@ import dev.rafadegolin.craftoffice.CraftOffice;
 
 /**
  * Os avisos {@code peer_add}, {@code peer_remove} e mudança de vídeo do estudo,
- * num pacote só. Quem tem {@code initiator} manda a oferta.
+ * num pacote só. Quem tem {@code initiator} manda a oferta. {@code fullVolume}:
+ * mesma zona ou palco, a distância não abaixa o som.
  */
-public record PeerPayload(Action action, UUID peer, boolean initiator, boolean video) implements CustomPacketPayload {
+public record PeerPayload(Action action, UUID peer, boolean initiator, boolean video, boolean fullVolume) implements CustomPacketPayload {
 	public enum Action { ADD, REMOVE, UPDATE }
 
 	public static final Type<PeerPayload> TYPE = new Type<>(CraftOffice.id("peer"));
@@ -23,6 +24,7 @@ public record PeerPayload(Action action, UUID peer, boolean initiator, boolean v
 			UUIDUtil.STREAM_CODEC, PeerPayload::peer,
 			ByteBufCodecs.BOOL, PeerPayload::initiator,
 			ByteBufCodecs.BOOL, PeerPayload::video,
+			ByteBufCodecs.BOOL, PeerPayload::fullVolume,
 			PeerPayload::new);
 
 	@Override

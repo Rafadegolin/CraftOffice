@@ -21,7 +21,7 @@ public class CraftOffice implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	/** Versão dos avisos entre cliente e servidor. Sobe a cada mudança incompatível. */
-	public static final int PROTOCOL = 3;
+	public static final int PROTOCOL = 4;
 
 	@Override
 	public void onInitialize() {

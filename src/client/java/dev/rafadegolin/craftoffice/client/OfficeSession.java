@@ -1,8 +1,10 @@
 package dev.rafadegolin.craftoffice.client;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -32,6 +34,8 @@ public final class OfficeSession {
 	private static final Map<UUID, Boolean> neighbors = new HashMap<>();
 	/** Microfone e câmera de cada vizinho, repassados pelo servidor. */
 	private static final Map<UUID, PeerStatePayload> peerStates = new HashMap<>();
+	/** Vizinhos na mesma zona ou no palco: volume cheio, sem cair com a distância. */
+	private static final Set<UUID> fullVolume = new HashSet<>();
 
 	private OfficeSession() {
 	}
@@ -44,6 +48,7 @@ public final class OfficeSession {
 		consentScreenPending = false;
 		neighbors.clear();
 		peerStates.clear();
+		fullVolume.clear();
 	}
 
 	public static void onConfig(ConfigPayload payload) {
@@ -107,6 +112,7 @@ public final class OfficeSession {
 		switch (payload.action()) {
 			case ADD -> {
 				neighbors.put(peer, payload.video());
+				setFullVolume(peer, payload.fullVolume());
 				boolean video = payload.video();
 				// Quem não inicia espera a oferta, que só é aceita de um vizinho.
 				if (payload.initiator()) {
@@ -120,10 +126,12 @@ public final class OfficeSession {
 			case REMOVE -> {
 				neighbors.remove(peer);
 				peerStates.remove(peer);
+				fullVolume.remove(peer);
 				engine.run(() -> engine.closeSession(peer));
 			}
 			case UPDATE -> {
 				neighbors.put(peer, payload.video());
+				setFullVolume(peer, payload.fullVolume());
 				boolean video = payload.video();
 				engine.run(() -> {
 					PeerSession session = engine.sessions().get(peer);
@@ -133,6 +141,20 @@ public final class OfficeSession {
 				});
 			}
 		}
+	}
+
+	private static void setFullVolume(UUID peer, boolean full) {
+		if (full) {
+			fullVolume.add(peer);
+		}
+		else {
+			fullVolume.remove(peer);
+		}
+	}
+
+	/** Mesma zona ou palco: a distância não abaixa o som. */
+	public static boolean fullVolume(UUID peer) {
+		return fullVolume.contains(peer);
 	}
 
 	public static void onPeerState(PeerStatePayload payload) {

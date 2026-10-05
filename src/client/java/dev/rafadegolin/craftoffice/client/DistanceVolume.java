@@ -12,7 +12,8 @@ import dev.rafadegolin.craftoffice.client.media.audio.PeerAudio;
 
 /**
  * Volume pela distância, como no Gather: cheio até {@link #FULL_VOLUME_RADIUS}
- * blocos, cai em linha reta até zero no raio de desconexão. Thread do jogo,
+ * blocos, cai em linha reta até zero no raio de desconexão. Na mesma zona ou
+ * com alguém no palco, volume cheio. Thread do jogo,
  * a cada tick.
  */
 public final class DistanceVolume {
@@ -34,6 +35,10 @@ public final class DistanceVolume {
 		for (UUID peer : engine.sessions().keySet()) {
 			PeerAudio audio = mixer.peerIfPresent(peer);
 			if (audio == null) {
+				continue;
+			}
+			if (OfficeSession.fullVolume(peer)) {
+				audio.setGain(1f);
 				continue;
 			}
 			Player other = mc.level.getPlayerByUUID(peer);
