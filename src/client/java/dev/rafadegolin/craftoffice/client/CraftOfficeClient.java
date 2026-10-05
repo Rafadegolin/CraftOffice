@@ -127,6 +127,10 @@ public class CraftOfficeClient implements ClientModInitializer {
 		}
 
 		UUID peer = info.getProfile().id();
+		if (peer.equals(ctx.getSource().getPlayer().getUUID())) {
+			ctx.getSource().sendError(Component.literal("Não dá para chamar você mesmo"));
+			return 0;
+		}
 		MediaEngine engine = MediaEngine.get();
 		engine.run(() -> {
 			if (!engine.ready()) {
