@@ -28,10 +28,10 @@ Preencher depois do roteiro abaixo.
 
 | Pergunta | Resultado |
 | --- | --- |
-| Própria câmera na HUD, fps | |
-| Cópia + `upload()` de 320×240, média e p95 | |
-| FPS do jogo com câmera ligada vs. desligada | |
-| Cores corretas (rosto não azulado)? | |
+| Própria câmera na HUD, fps | **20 fps**, já chegando em 320×240 da câmera integrada |
+| Cópia + `upload()` de 320×240, média e p95 | **78 µs, p95 102 µs**. A 20 fps, cerca de 0,16% de um frame de 16,7 ms. Quatro vídeos ficariam abaixo de 0,5 ms por segundo de jogo |
+| FPS do jogo com câmera ligada vs. desligada | 60 fps com câmera ligada. Parece limitado pelo VSync, então ainda não mostra o custo real. Medir com VSync desligado |
+| Cores corretas (rosto não azulado)? | **Sim.** `FourCC.ABGR` bate com a `NativeImage` |
 | Conexão fecha entre dois clientes? Tipo de par (host/srflx) | |
 | Vídeo chega no outro cliente, fps | |
 | Áudio chega no outro (callbacks/s e pico > 0 ao falar) | |
