@@ -32,9 +32,10 @@ Preencher depois do roteiro abaixo.
 | Cópia + `upload()` de 320×240, média e p95 | **78 µs, p95 102 µs**. A 20 fps, cerca de 0,16% de um frame de 16,7 ms. Quatro vídeos ficariam abaixo de 0,5 ms por segundo de jogo |
 | FPS do jogo com câmera ligada vs. desligada | 60 fps com câmera ligada. Parece limitado pelo VSync, então ainda não mostra o custo real. Medir com VSync desligado |
 | Cores corretas (rosto não azulado)? | **Sim.** `FourCC.ABGR` bate com a `NativeImage` |
-| Conexão fecha entre dois clientes? Tipo de par (host/srflx) | |
-| Vídeo chega no outro cliente, fps | |
-| Áudio chega no outro (callbacks/s e pico > 0 ao falar) | |
+| Conexão fecha entre dois clientes? Tipo de par (host/srflx) | **Sim.** `CONNECTED` em menos de 1 s, par `host` na rede local (192.168.10.17). Sinalização pelo servidor funcionou de primeira |
+| Vídeo chega no outro cliente, fps | **Sim, do Player1 para o Player2: 19 a 20 fps em 320×240** durante 1 minuto. No sentido contrário não chegou: quem atendia criava as faixas antes de ler a oferta. Corrigido, falta retestar |
+| Áudio chega no outro (callbacks/s e pico > 0 ao falar) | Chega como fluxo: 48 kHz, mono, 16 bits, 100 callbacks/s. Mas **pico 0 o tempo todo**: silêncio digital. Provável microfone errado (o primeiro da lista é "Microfone Externo", entrada vazia). Agora usa o padrão do Windows e `/office mic <n>` troca. Falta retestar |
+| Jogo fecha sem travar? | Não, no primeiro teste: a thread nativa segurava o processo. Corrigido com o encerramento da mídia, falta retestar |
 
 ## Roteiro do teste
 

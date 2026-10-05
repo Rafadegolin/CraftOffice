@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
@@ -117,6 +118,13 @@ public class CraftOfficeClient implements ClientModInitializer {
 							engine.run(engine::closeAll);
 							return 1;
 						}))
+						.then(ClientCommands.literal("mic")
+								.then(ClientCommands.argument("number", IntegerArgumentType.integer(1)).executes(ctx -> {
+									int index = IntegerArgumentType.getInteger(ctx, "number");
+									MediaEngine engine = MediaEngine.get();
+									engine.run(() -> feedback(List.of(engine.setMicrophone(index))));
+									return 1;
+								})))
 						.then(ClientCommands.literal("stats").executes(this::stats))));
 	}
 
@@ -178,6 +186,7 @@ public class CraftOfficeClient implements ClientModInitializer {
 		lines.add("webrtc-java: " + (engine.ready() ? "carregada em " + engine.loadMillis() + " ms" : "falhou: " + engine.loadError()));
 		lines.add(String.format("Câmera: %s, %.1f fps, origem %s, jogo %d fps", engine.videoOn() ? "ligada" : "desligada",
 				engine.selfSlot().fps(), engine.selfSlot().sourceSize(), Minecraft.getInstance().getFps()));
+		lines.add("Microfone: " + engine.micName());
 		for (PeerSession s : engine.sessions().values()) {
 			lines.add(String.format("%s: %s, par %s, vídeo %.1f fps %s, áudio %s, %.0f callbacks/s, pico %d",
 					s.peer().toString().substring(0, 8), s.state(), s.selectedPair(), s.remoteSlot().fps(),

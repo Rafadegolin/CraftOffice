@@ -20,6 +20,7 @@ import dev.onvoid.webrtc.RTCPeerConnection;
 import dev.onvoid.webrtc.RTCPeerConnectionState;
 import dev.onvoid.webrtc.RTCRtpCodecCapability;
 import dev.onvoid.webrtc.RTCRtpEncodingParameters;
+import dev.onvoid.webrtc.RTCRtpSendParameters;
 import dev.onvoid.webrtc.RTCRtpSender;
 import dev.onvoid.webrtc.RTCRtpTransceiver;
 import dev.onvoid.webrtc.RTCRtpTransceiverDirection;
@@ -73,6 +74,15 @@ public final class PeerSession implements PeerConnectionObserver {
 		config.iceServers.add(stun);
 		connection = engine.factory().createPeerConnection(config, this);
 
+		// Quem atende só anexa as faixas depois de ler a oferta: transceptores
+		// criados antes não se casam com os da oferta e a resposta sai sem envio.
+		if (initiator) {
+			addInitiatorTracks();
+			connection.createOffer(new RTCOfferOptions(), describe(RTCSdpType.OFFER));
+		}
+	}
+
+	private void addInitiatorTracks() {
 		RTCRtpTransceiverInit audioInit = new RTCRtpTransceiverInit();
 		audioInit.direction = RTCRtpTransceiverDirection.SEND_RECV;
 		audioInit.streamIds.add("craftoffice");
@@ -91,9 +101,32 @@ public final class PeerSession implements PeerConnectionObserver {
 			preferVp8(transceiver);
 			videoSender = transceiver.getSender();
 		}
+	}
 
-		if (initiator) {
-			connection.createOffer(new RTCOfferOptions(), describe(RTCSdpType.OFFER));
+	/** Lado que atende: {@code addTrack} reaproveita os transceptores criados pela oferta. */
+	private void addAnswererTracks() {
+		connection.addTrack(engine.audioTrack(), List.of("craftoffice"));
+		VideoTrack video = engine.videoTrack();
+		if (video != null) {
+			videoSender = connection.addTrack(video, List.of("craftoffice"));
+		}
+	}
+
+	/** Rosto a 140 kbps e 20 quadros, como no estudo. */
+	private void limitVideo() {
+		if (videoSender == null) {
+			return;
+		}
+		try {
+			RTCRtpSendParameters parameters = videoSender.getParameters();
+			if (parameters.encodings != null && !parameters.encodings.isEmpty()) {
+				parameters.encodings.getFirst().maxBitrate = 140_000;
+				parameters.encodings.getFirst().maxFramerate = 20.0;
+				videoSender.setParameters(parameters);
+			}
+		}
+		catch (Throwable t) {
+			CraftOffice.LOGGER.warn("Não deu para limitar o vídeo: {}", t.toString());
 		}
 	}
 
@@ -108,8 +141,12 @@ public final class PeerSession implements PeerConnectionObserver {
 		return new CreateSessionDescriptionObserver() {
 			@Override
 			public void onSuccess(RTCSessionDescription description) {
-				engine.run(() -> connection.setLocalDescription(description, observer("local " + type, () ->
-						send(type == RTCSdpType.OFFER ? "offer" : "answer", description.sdp))));
+				engine.run(() -> connection.setLocalDescription(description, observer("local " + type, () -> {
+					send(type == RTCSdpType.OFFER ? "offer" : "answer", description.sdp);
+					if (type == RTCSdpType.ANSWER) {
+						limitVideo();
+					}
+				})));
 			}
 
 			@Override
@@ -138,6 +175,7 @@ public final class PeerSession implements PeerConnectionObserver {
 		switch (kind) {
 			case "offer" -> connection.setRemoteDescription(new RTCSessionDescription(RTCSdpType.OFFER, data),
 					observer("remote offer", () -> {
+						addAnswererTracks();
 						flushCandidates();
 						connection.createAnswer(new RTCAnswerOptions(), describe(RTCSdpType.ANSWER));
 					}));

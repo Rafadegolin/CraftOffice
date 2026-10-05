@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import dev.onvoid.webrtc.PeerConnectionFactory;
 import dev.onvoid.webrtc.media.MediaDevices;
 import dev.onvoid.webrtc.media.audio.AudioDevice;
+import dev.onvoid.webrtc.media.audio.AudioDeviceModule;
 import dev.onvoid.webrtc.media.audio.AudioOptions;
 import dev.onvoid.webrtc.media.audio.AudioTrack;
 import dev.onvoid.webrtc.media.audio.AudioTrackSource;
@@ -42,6 +43,8 @@ public final class MediaEngine {
 	private volatile String loadError;
 	private volatile long loadMillis = -1;
 
+	private AudioDeviceModule audioModule;
+	private volatile String micName = "-";
 	private AudioTrackSource audioSource;
 	private AudioTrack audioTrack;
 
@@ -79,7 +82,20 @@ public final class MediaEngine {
 	private void load() {
 		long start = System.nanoTime();
 		try {
-			factory = new PeerConnectionFactory();
+			// Sem escolher, o módulo abre o primeiro microfone da lista, que pode
+			// ser uma entrada vazia e mandar silêncio. Usa os padrões do Windows.
+			audioModule = new AudioDeviceModule();
+			AudioDevice mic = MediaDevices.getDefaultAudioCaptureDevice();
+			if (mic != null) {
+				audioModule.setRecordingDevice(mic);
+				micName = mic.getName();
+			}
+			AudioDevice speaker = MediaDevices.getDefaultAudioRenderDevice();
+			if (speaker != null) {
+				audioModule.setPlayoutDevice(speaker);
+			}
+			CraftOffice.LOGGER.info("Microfone: {}. Saída: {}", micName, speaker != null ? speaker.getName() : "-");
+			factory = new PeerConnectionFactory(audioModule);
 
 			AudioOptions options = new AudioOptions();
 			options.echoCancellation = true;
@@ -131,6 +147,26 @@ public final class MediaEngine {
 		return videoOn;
 	}
 
+	public String micName() {
+		return micName;
+	}
+
+	/** Troca o microfone pelo número da lista de {@code /office devices}. Roda na thread de mídia. */
+	public String setMicrophone(int index) {
+		List<AudioDevice> mics = MediaDevices.getAudioCaptureDevices();
+		if (!ready() || index < 1 || index > mics.size()) {
+			return "Microfone inválido. Veja os números em /office devices";
+		}
+		AudioDevice mic = mics.get(index - 1);
+		audioModule.stopRecording();
+		audioModule.setRecordingDevice(mic);
+		audioModule.initRecording();
+		audioModule.startRecording();
+		micName = mic.getName();
+		CraftOffice.LOGGER.info("Microfone trocado para {}", micName);
+		return "Microfone: " + micName;
+	}
+
 	/** Lista de dispositivos, para o comando {@code /office devices}. Roda na thread de mídia. */
 	public List<String> describeDevices() {
 		List<String> lines = new ArrayList<>();
@@ -138,8 +174,9 @@ public final class MediaEngine {
 			List<VideoCaptureCapability> caps = MediaDevices.getVideoCaptureCapabilities(device);
 			lines.add("Câmera: " + device.getName() + " (" + caps.size() + " formatos)");
 		}
+		int n = 1;
 		for (AudioDevice device : MediaDevices.getAudioCaptureDevices()) {
-			lines.add("Microfone: " + device.getName());
+			lines.add("Microfone " + n++ + ": " + device.getName() + (device.getName().equals(micName) ? " (em uso)" : ""));
 		}
 		for (AudioDevice device : MediaDevices.getAudioRenderDevices()) {
 			lines.add("Saída: " + device.getName());
@@ -235,6 +272,10 @@ public final class MediaEngine {
 		if (factory != null) {
 			release("fábrica", factory::dispose);
 		}
+		if (audioModule != null) {
+			release("módulo de áudio", audioModule::dispose);
+		}
+		audioModule = null;
 		videoTrack = null;
 		videoSource = null;
 		pattern = null;
